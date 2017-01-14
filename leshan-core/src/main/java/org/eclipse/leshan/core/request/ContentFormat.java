@@ -19,8 +19,8 @@ package org.eclipse.leshan.core.request;
  * Data format defined by the LWM2M specification
  */
 public class ContentFormat {
-    public static final int TLV_CODE = 11542;
-    public static final int JSON_CODE = 11543;
+    public static final int TLV_CODE = 99;		/* KdW -- Compatibility with MBED -- Original value: 11542 */
+    public static final int JSON_CODE = 100;	/* KdW -- Compatibility with MBED -- Original value; 11543 */
     public static final int TEXT_CODE = 0;
     public static final int OPAQUE_CODE = 42;
     public static final int LINK_CODE = 40;
