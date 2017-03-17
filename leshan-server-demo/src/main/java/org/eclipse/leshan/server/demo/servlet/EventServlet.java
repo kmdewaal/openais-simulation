@@ -16,6 +16,7 @@
 package org.eclipse.leshan.server.demo.servlet;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,17 +28,17 @@ import org.eclipse.leshan.core.node.LwM2mNode;
 import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.core.response.ObserveResponse;
 import org.eclipse.leshan.server.californium.impl.LeshanServer;
-import org.eclipse.leshan.server.client.Registration;
-import org.eclipse.leshan.server.client.RegistrationUpdate;
-import org.eclipse.leshan.server.client.RegistrationListener;
-import org.eclipse.leshan.server.demo.servlet.json.RegistrationSerializer;
 import org.eclipse.leshan.server.demo.servlet.json.LwM2mNodeSerializer;
+import org.eclipse.leshan.server.demo.servlet.json.RegistrationSerializer;
 import org.eclipse.leshan.server.demo.servlet.log.CoapMessage;
 import org.eclipse.leshan.server.demo.servlet.log.CoapMessageListener;
 import org.eclipse.leshan.server.demo.servlet.log.CoapMessageTracer;
 import org.eclipse.leshan.server.demo.utils.EventSource;
 import org.eclipse.leshan.server.demo.utils.EventSourceServlet;
 import org.eclipse.leshan.server.observation.ObservationListener;
+import org.eclipse.leshan.server.registration.Registration;
+import org.eclipse.leshan.server.registration.RegistrationListener;
+import org.eclipse.leshan.server.registration.RegistrationUpdate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,8 +67,6 @@ public class EventServlet extends EventSourceServlet {
 
     private final CoapMessageTracer coapMessageTracer;
 
-    private final LeshanServer server;
-
     private Set<LeshanEventSource> eventSources = Collections
             .newSetFromMap(new ConcurrentHashMap<LeshanEventSource, Boolean>());
 
@@ -83,10 +82,10 @@ public class EventServlet extends EventSourceServlet {
         public void updated(RegistrationUpdate update, Registration updatedRegistration) {
             String jReg = EventServlet.this.gson.toJson(updatedRegistration);
             sendEvent(EVENT_UPDATED, jReg, updatedRegistration.getEndpoint());
-        };
+        }
 
         @Override
-        public void unregistered(Registration registration) {
+        public void unregistered(Registration registration, Collection<Observation> observations) {
             String jReg = EventServlet.this.gson.toJson(registration);
             sendEvent(EVENT_DEREGISTRATION, jReg, registration.getEndpoint());
         }
@@ -99,12 +98,11 @@ public class EventServlet extends EventSourceServlet {
         }
 
         @Override
-        public void newValue(Observation observation, ObserveResponse response) {
+        public void onResponse(Observation observation, Registration registration, ObserveResponse response) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Received notification from [{}] containing value [{}]", observation.getPath(),
                         response.getContent().toString());
             }
-            Registration registration = server.getRegistrationService().getById(observation.getRegistrationId());
 
             if (registration != null) {
                 String data = new StringBuffer("{\"ep\":\"").append(registration.getEndpoint()).append("\",\"res\":\"")
@@ -117,12 +115,19 @@ public class EventServlet extends EventSourceServlet {
         }
 
         @Override
-        public void newObservation(Observation observation) {
+        public void onError(Observation observation, Registration registration, Exception error) {
+            if (LOG.isWarnEnabled()) {
+                LOG.warn(String.format("Unable to handle notification of [%s:%s]", observation.getRegistrationId(),
+                        observation.getPath()), error);
+            }
+        }
+
+        @Override
+        public void newObservation(Observation observation, Registration registration) {
         }
     };
 
     public EventServlet(LeshanServer server, int securePort) {
-        this.server = server;
         server.getRegistrationService().addListener(this.registrationListener);
         server.getObservationService().addListener(this.observationListener);
 

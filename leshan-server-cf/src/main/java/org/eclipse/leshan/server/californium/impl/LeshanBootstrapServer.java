@@ -24,6 +24,7 @@ import org.eclipse.californium.core.network.config.NetworkConfig;
 import org.eclipse.californium.scandium.DTLSConnector;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig.Builder;
+import org.eclipse.leshan.LwM2m;
 import org.eclipse.leshan.core.model.LwM2mModel;
 import org.eclipse.leshan.core.model.ObjectLoader;
 import org.eclipse.leshan.server.bootstrap.BootstrapHandler;
@@ -39,15 +40,9 @@ import org.slf4j.LoggerFactory;
 /**
  * A Lightweight M2M server, serving bootstrap information on /bs.
  */
-public class LwM2mBootstrapServerImpl implements LwM2mBootstrapServer {
+public class LeshanBootstrapServer implements LwM2mBootstrapServer {
 
-    private final static Logger LOG = LoggerFactory.getLogger(LwM2mBootstrapServerImpl.class);
-
-    /** IANA assigned UDP port for CoAP (so for LWM2M) */
-    public static final int PORT = 5683;
-
-    /** IANA assigned UDP port for CoAP with DTLS (so for LWM2M) */
-    public static final int PORT_DTLS = 5684;
+    private final static Logger LOG = LoggerFactory.getLogger(LeshanBootstrapServer.class);
 
     private final CoapServer coapServer;
     private final CoapEndpoint nonSecureEndpoint;
@@ -56,14 +51,15 @@ public class LwM2mBootstrapServerImpl implements LwM2mBootstrapServer {
     private final BootstrapStore bsStore;
     private final BootstrapSecurityStore bsSecurityStore;
 
-    public LwM2mBootstrapServerImpl(BootstrapStore bsStore, BootstrapSecurityStore securityStore,
+    public LeshanBootstrapServer(BootstrapStore bsStore, BootstrapSecurityStore securityStore,
             BootstrapSessionManager bsSessionManager) {
-        this(new InetSocketAddress((InetAddress) null, PORT), new InetSocketAddress((InetAddress) null, PORT_DTLS),
-                bsStore, securityStore, bsSessionManager);
+        this(new InetSocketAddress((InetAddress) null, LwM2m.DEFAULT_COAP_PORT),
+                new InetSocketAddress((InetAddress) null, LwM2m.DEFAULT_COAP_SECURE_PORT), bsStore, securityStore,
+                bsSessionManager);
 
     }
 
-    public LwM2mBootstrapServerImpl(InetSocketAddress localAddress, InetSocketAddress localAddressSecure,
+    public LeshanBootstrapServer(InetSocketAddress localAddress, InetSocketAddress localAddressSecure,
             BootstrapStore bsStore, BootstrapSecurityStore bsSecurityStore, BootstrapSessionManager bsSessionManager) {
         Validate.notNull(bsStore, "bootstrap store must not be null");
 
@@ -86,8 +82,8 @@ public class LwM2mBootstrapServerImpl implements LwM2mBootstrapServer {
         LwM2mBootstrapRequestSender requestSender = new CaliforniumLwM2mBootstrapRequestSender(secureEndpoint,
                 nonSecureEndpoint, new LwM2mModel(ObjectLoader.loadDefault()));
 
-        BootstrapResource bsResource = new BootstrapResource(new BootstrapHandler(bsStore, requestSender,
-                bsSessionManager));
+        BootstrapResource bsResource = new BootstrapResource(
+                new BootstrapHandler(bsStore, requestSender, bsSessionManager));
         coapServer.add(bsResource);
     }
 
@@ -104,6 +100,7 @@ public class LwM2mBootstrapServerImpl implements LwM2mBootstrapServer {
     /**
      * Starts the server and binds it to the specified port.
      */
+    @Override
     public void start() {
         coapServer.start();
         LOG.info("Bootstrap server started at coap://{}, coaps://{}.", getNonSecureAddress(), getSecureAddress());
@@ -112,6 +109,7 @@ public class LwM2mBootstrapServerImpl implements LwM2mBootstrapServer {
     /**
      * Stops the server and unbinds it from assigned ports (can be restarted).
      */
+    @Override
     public void stop() {
         coapServer.stop();
         LOG.info("Bootstrap server stopped.");

@@ -24,8 +24,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.eclipse.leshan.Link;
-import org.eclipse.leshan.server.client.Registration;
 import org.eclipse.leshan.server.cluster.serialization.RegistrationSerDes;
+import org.eclipse.leshan.server.registration.Registration;
 import org.junit.Test;
 
 public class ClientSerDesTest {
@@ -34,7 +34,7 @@ public class ClientSerDesTest {
     public void ser_and_des_are_equals() throws Exception {
         Link[] objs = new Link[2];
         Map<String, Object> att = new HashMap<>();
-        att.put("ts", new Integer(12));
+        att.put("ts", 12);
         att.put("rt", "test");
         objs[0] = new Link("/0/1024/2", att);
         objs[1] = new Link("/0/2");

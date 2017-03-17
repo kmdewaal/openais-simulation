@@ -13,9 +13,9 @@
  * Contributors:
  *     Sierra Wireless - initial API and implementation
  *******************************************************************************/
-package org.eclipse.leshan.server.client;
+package org.eclipse.leshan.server.registration;
 
-import java.util.Collection;
+import java.util.Iterator;
 
 /**
  * A service to access registered clients
@@ -25,7 +25,7 @@ public interface RegistrationService {
     /**
      * Retrieves a registration by id.
      * 
-     * @param registration id
+     * @param id registration id
      * @return the matching registration or <code>null</code> if not found
      */
     Registration getById(String id);
@@ -39,13 +39,12 @@ public interface RegistrationService {
     Registration getByEndpoint(String endpoint);
 
     /**
-     * Returns an unmodifiable list of all registrations.
-     * 
-     * @return the registrations.
-     * @deprecated should be replace by an iterator
+     * Returns an iterator over all registrations. There are no guarantees concerning the order in which the
+     * elements are returned.
+     *
+     * @return an <tt>Iterator</tt> over registrations
      */
-    @Deprecated
-    Collection<Registration> getAllRegistrations();
+    Iterator<Registration> getAllRegistrations();
 
     /**
      * Adds a new listener to be notified with client registration events.

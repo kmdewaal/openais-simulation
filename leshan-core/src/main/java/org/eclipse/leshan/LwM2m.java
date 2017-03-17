@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2013-2015 Sierra Wireless and others.
+ * Copyright (c) 2017 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
@@ -13,17 +13,16 @@
  * Contributors:
  *     Sierra Wireless - initial API and implementation
  *******************************************************************************/
-package org.eclipse.leshan.server.bootstrap;
+package org.eclipse.leshan;
 
-/**
- * The different DTLS security modes
- */
-public enum SecurityMode {
-    PSK(0), RPK(1), X509(2), NO_SEC(3);
+public interface LwM2m {
 
-    public final int code;
+    /** The supported version of the specification */
+    static final String VERSION = "1.0";
 
-    private SecurityMode(int code) {
-        this.code = code;
-    }
+    /** The default CoAP port for unsecured CoAP communication */
+    static final int DEFAULT_COAP_PORT = 5683;
+
+    /** The default CoAP port for secure CoAP communication */
+    static final int DEFAULT_COAP_SECURE_PORT = 5684;
 }

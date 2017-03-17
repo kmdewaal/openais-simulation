@@ -18,10 +18,12 @@ package org.eclipse.leshan.integration.tests;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
 import org.eclipse.leshan.LwM2mId;
+import org.eclipse.leshan.SecurityMode;
 import org.eclipse.leshan.client.californium.LeshanClientBuilder;
 import org.eclipse.leshan.client.object.Device;
 import org.eclipse.leshan.client.object.Security;
@@ -32,13 +34,11 @@ import org.eclipse.leshan.server.bootstrap.BootstrapConfig.ServerConfig;
 import org.eclipse.leshan.server.bootstrap.BootstrapConfig.ServerSecurity;
 import org.eclipse.leshan.server.bootstrap.BootstrapSessionManager;
 import org.eclipse.leshan.server.bootstrap.BootstrapStore;
-import org.eclipse.leshan.server.bootstrap.SecurityMode;
-import org.eclipse.leshan.server.californium.impl.LwM2mBootstrapServerImpl;
-import org.eclipse.leshan.server.impl.BootstrapSessionManagerImpl;
+import org.eclipse.leshan.server.californium.impl.LeshanBootstrapServer;
+import org.eclipse.leshan.server.impl.DefaultBootstrapSessionManager;
 import org.eclipse.leshan.server.security.BootstrapSecurityStore;
 import org.eclipse.leshan.server.security.SecurityInfo;
 import org.eclipse.leshan.server.security.EditableSecurityStore;
-import org.eclipse.leshan.util.Charsets;
 import org.eclipse.leshan.util.Hex;
 
 /**
@@ -51,7 +51,7 @@ public class BootstrapIntegrationTestHelper extends IntegrationTestHelper {
     public static final byte[] GOOD_PSK_KEY = Hex.decodeHex("73656372657450534b".toCharArray());
     public static final byte[] BAD_PSK_KEY = Hex.decodeHex("010101010101010101".toCharArray());
 
-    LwM2mBootstrapServerImpl bootstrapServer;
+    LeshanBootstrapServer bootstrapServer;
 
     public void createBootstrapServer(BootstrapSecurityStore securityStore) {
 
@@ -91,12 +91,13 @@ public class BootstrapIntegrationTestHelper extends IntegrationTestHelper {
             securityStore = dummyBsSecurityStore();
         }
 
-        BootstrapSessionManager bsSessionManager = new BootstrapSessionManagerImpl(securityStore);
+        BootstrapSessionManager bsSessionManager = new DefaultBootstrapSessionManager(securityStore);
 
-        bootstrapServer = new LwM2mBootstrapServerImpl(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0),
+        bootstrapServer = new LeshanBootstrapServer(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0),
                 new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), bsStore, securityStore, bsSessionManager);
     }
 
+    @Override
     public void createClient() {
         // Create Security Object (with bootstrap server only)
         String bsUrl = "coap://" + bootstrapServer.getNonSecureAddress().getHostString() + ":"
@@ -111,7 +112,7 @@ public class BootstrapIntegrationTestHelper extends IntegrationTestHelper {
         // Create Security Object (with bootstrap server only)
         String bsUrl = "coaps://" + bootstrapServer.getSecureAddress().getHostString() + ":"
                 + bootstrapServer.getSecureAddress().getPort();
-        byte[] pskId = pskIdentity.getBytes(Charsets.UTF_8);
+        byte[] pskId = pskIdentity.getBytes(StandardCharsets.UTF_8);
         Security security = Security.pskBootstrap(bsUrl, pskId, pskKey);
 
         createClient(security);

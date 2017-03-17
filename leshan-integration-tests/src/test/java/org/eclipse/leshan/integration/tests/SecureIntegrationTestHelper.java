@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.security.AlgorithmParameters;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
@@ -53,13 +54,13 @@ import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.server.californium.LeshanServerBuilder;
 import org.eclipse.leshan.server.impl.InMemorySecurityStore;
 import org.eclipse.leshan.server.security.EditableSecurityStore;
-import org.eclipse.leshan.util.Charsets;
 import org.eclipse.leshan.util.Hex;
 
 public class SecureIntegrationTestHelper extends IntegrationTestHelper {
 
     public static final String GOOD_PSK_ID = "Good_Client_identity";
     public static final byte[] GOOD_PSK_KEY = Hex.decodeHex("73656372657450534b".toCharArray());
+    public static final String GOOD_ENDPOINT = "good_endpoint";
     public static final String BAD_PSK_ID = "Bad_Client_identity";
     public static final byte[] BAD_PSK_KEY = Hex.decodeHex("010101010101010101".toCharArray());
     public static final String BAD_ENDPOINT = "bad_endpoint";
@@ -104,9 +105,10 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
 
             // Get certificates from key store
             char[] clientKeyStorePwd = "client".toCharArray();
-            FileInputStream clientKeyStoreFile = new FileInputStream("./credentials/clientKeyStore.jks");
             KeyStore clientKeyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            clientKeyStore.load(clientKeyStoreFile, clientKeyStorePwd);
+            try (FileInputStream clientKeyStoreFile = new FileInputStream("./credentials/clientKeyStore.jks")) {
+                clientKeyStore.load(clientKeyStoreFile, clientKeyStorePwd);
+            }
 
             clientPrivateKeyFromCert = (PrivateKey) clientKeyStore.getKey("client", clientKeyStorePwd);
             clientCAX509Cert = (X509Certificate) clientKeyStore.getCertificate("clientCA");
@@ -144,9 +146,10 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
 
             // Get certificates from key store
             char[] serverKeyStorePwd = "server".toCharArray();
-            FileInputStream serverKeyStoreFile = new FileInputStream("./credentials/serverKeyStore.jks");
             KeyStore serverKeyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            serverKeyStore.load(serverKeyStoreFile, serverKeyStorePwd);
+            try (FileInputStream serverKeyStoreFile = new FileInputStream("./credentials/serverKeyStore.jks")) {
+                serverKeyStore.load(serverKeyStoreFile, serverKeyStorePwd);
+            }
 
             serverPrivateKeyFromCert = (PrivateKey) serverKeyStore.getKey("server", serverKeyStorePwd);
             serverCAX509Cert = (X509Certificate) serverKeyStore.getCertificate("serverCA");
@@ -165,7 +168,7 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
                 Security.psk(
                         "coaps://" + server.getSecureAddress().getHostString() + ":"
                                 + server.getSecureAddress().getPort(),
-                        12345, GOOD_PSK_ID.getBytes(Charsets.UTF_8), GOOD_PSK_KEY));
+                        12345, GOOD_PSK_ID.getBytes(StandardCharsets.UTF_8), GOOD_PSK_KEY));
         initializer.setInstancesForObject(LwM2mId.SERVER, new Server(12345, LIFETIME, BindingMode.U, false));
         initializer.setInstancesForObject(LwM2mId.DEVICE, new Device("Eclipse Leshan", MODEL_NUMBER, "12345", "U"));
         List<LwM2mObjectEnabler> objects = initializer.createMandatory();
@@ -243,6 +246,8 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
         builder.setSecurityStore(new InMemorySecurityStore());
 
         server = builder.build();
+        // monitor client registration
+        setupRegistrationMonitoring();
     }
 
     public void createServerWithX509Cert(Certificate[] trustedCertificates) {
@@ -255,6 +260,8 @@ public class SecureIntegrationTestHelper extends IntegrationTestHelper {
         builder.setSecurityStore(new InMemorySecurityStore());
 
         server = builder.build();
+        // monitor client registration
+        setupRegistrationMonitoring();
     }
 
     public PublicKey getServerPublicKey() {

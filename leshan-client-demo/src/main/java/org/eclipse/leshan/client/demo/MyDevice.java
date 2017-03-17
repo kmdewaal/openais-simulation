@@ -25,7 +25,7 @@ public class MyDevice extends BaseInstanceEnabler {
 
     public MyDevice() {
         // notify new date each 5 second
-        Timer timer = new Timer();
+        Timer timer = new Timer("Device-Current Time");
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
@@ -115,12 +115,12 @@ public class MyDevice extends BaseInstanceEnabler {
     }
 
     private int getBatteryLevel() {
-        final Random rand = new Random();
+        Random rand = new Random();
         return rand.nextInt(100);
     }
 
     private int getMemoryFree() {
-        final Random rand = new Random();
+        Random rand = new Random();
         return rand.nextInt(50) + 114;
     }
 
@@ -128,7 +128,7 @@ public class MyDevice extends BaseInstanceEnabler {
         return new Date();
     }
 
-    private String utcOffset = new SimpleDateFormat("X").format(Calendar.getInstance().getTime());;
+    private String utcOffset = new SimpleDateFormat("X").format(Calendar.getInstance().getTime());
 
     private String getUtcOffset() {
         return utcOffset;

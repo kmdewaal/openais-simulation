@@ -22,6 +22,7 @@ import java.security.PublicKey;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 
+import org.eclipse.leshan.LwM2m;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
 import org.eclipse.leshan.core.node.codec.LwM2mNodeDecoder;
@@ -29,7 +30,6 @@ import org.eclipse.leshan.core.node.codec.LwM2mNodeEncoder;
 import org.eclipse.leshan.server.LwM2mServer;
 import org.eclipse.leshan.server.californium.impl.InMemoryRegistrationStore;
 import org.eclipse.leshan.server.californium.impl.LeshanServer;
-import org.eclipse.leshan.server.impl.FileSecurityStore;
 import org.eclipse.leshan.server.model.LwM2mModelProvider;
 import org.eclipse.leshan.server.model.StandardModelProvider;
 import org.eclipse.leshan.server.security.Authorizer;
@@ -42,12 +42,6 @@ import org.eclipse.leshan.server.security.SecurityStore;
  * {@link LwM2mServer} ready to operate.
  */
 public class LeshanServerBuilder {
-
-    /** IANA assigned UDP port for CoAP (so for LWM2M) */
-    public static final int PORT = 5683;
-
-    /** IANA assigned UDP port for CoAP with DTLS (so for LWM2M) */
-    public static final int PORT_DTLS = 5684;
 
     private CaliforniumRegistrationStore registrationStore;
     private SecurityStore securityStore;
@@ -145,13 +139,11 @@ public class LeshanServerBuilder {
 
     public LeshanServer build() {
         if (localAddress == null)
-            localAddress = new InetSocketAddress((InetAddress) null, PORT);
+            localAddress = new InetSocketAddress((InetAddress) null, LwM2m.DEFAULT_COAP_PORT);
         if (localSecureAddress == null)
-            localSecureAddress = new InetSocketAddress((InetAddress) null, PORT_DTLS);
+            localSecureAddress = new InetSocketAddress((InetAddress) null, LwM2m.DEFAULT_COAP_SECURE_PORT);
         if (registrationStore == null)
             registrationStore = new InMemoryRegistrationStore();
-        if (securityStore == null)
-            securityStore = new FileSecurityStore();
         if (authorizer == null)
             authorizer = new DefaultAuthorizer(securityStore);
         if (modelProvider == null)

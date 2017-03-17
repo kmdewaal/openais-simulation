@@ -41,7 +41,7 @@ import org.eclipse.leshan.core.model.LwM2mModel;
 import org.eclipse.leshan.core.node.LwM2mNode;
 import org.eclipse.leshan.core.node.LwM2mObjectInstance;
 import org.eclipse.leshan.core.node.LwM2mPath;
-import org.eclipse.leshan.core.node.codec.InvalidValueException;
+import org.eclipse.leshan.core.node.codec.CodecException;
 import org.eclipse.leshan.core.node.codec.LwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.LwM2mNodeEncoder;
 import org.eclipse.leshan.core.request.BootstrapWriteRequest;
@@ -169,14 +169,14 @@ public class ObjectResource extends CoapResource implements NotifySender {
     }
 
     @Override
-    public void handlePUT(final CoapExchange coapExchange) {
+    public void handlePUT(CoapExchange coapExchange) {
         ServerIdentity identity = extractServerIdentity(coapExchange, bootstrapHandler);
         String URI = coapExchange.getRequestOptions().getUriPathString();
 
         // get Observe Spec
         ObserveSpec spec = null;
         if (coapExchange.advanced().getRequest().getOptions().getURIQueryCount() != 0) {
-            final List<String> uriQueries = coapExchange.advanced().getRequest().getOptions().getUriQuery();
+            List<String> uriQueries = coapExchange.advanced().getRequest().getOptions().getUriQuery();
             spec = ObserveSpec.parse(uriQueries);
         }
 
@@ -216,9 +216,9 @@ public class ObjectResource extends CoapResource implements NotifySender {
                 }
 
                 return;
-            } catch (InvalidValueException e) {
+            } catch (CodecException e) {
                 LOG.warn("Unable to decode payload to write", e);
-                coapExchange.respond(ResponseCode.INTERNAL_SERVER_ERROR);
+                coapExchange.respond(ResponseCode.BAD_REQUEST);
                 return;
             }
 
@@ -226,7 +226,7 @@ public class ObjectResource extends CoapResource implements NotifySender {
     }
 
     @Override
-    public void handlePOST(final CoapExchange exchange) {
+    public void handlePOST(CoapExchange exchange) {
         ServerIdentity identity = extractServerIdentity(exchange, bootstrapHandler);
         String URI = exchange.getRequestOptions().getUriPathString();
 
@@ -261,7 +261,7 @@ public class ObjectResource extends CoapResource implements NotifySender {
                 WriteResponse response = nodeEnabler.write(identity,
                         new WriteRequest(Mode.UPDATE, contentFormat, URI, lwM2mNode));
                 exchange.respond(fromLwM2mCode(response.getCode()), response.getErrorMessage());
-            } catch (InvalidValueException e) {
+            } catch (CodecException e) {
                 LOG.warn("Unable to decode payload to write", e);
                 exchange.respond(ResponseCode.BAD_REQUEST);
             }
@@ -273,12 +273,6 @@ public class ObjectResource extends CoapResource implements NotifySender {
             // decode the payload as an instance
             LwM2mObjectInstance newInstance = decoder.decode(exchange.getRequestPayload(), contentFormat,
                     new LwM2mPath(path.getObjectId()), model, LwM2mObjectInstance.class);
-
-            if (newInstance.getResources().isEmpty()) {
-                LOG.debug("Invalid create request payload: {}", newInstance);
-                exchange.respond(ResponseCode.BAD_REQUEST);
-                return;
-            }
 
             CreateRequest createRequest = null;
             if (newInstance.getId() != LwM2mObjectInstance.UNDEFINED) {
@@ -299,7 +293,7 @@ public class ObjectResource extends CoapResource implements NotifySender {
                 exchange.respond(fromLwM2mCode(response.getCode()), response.getErrorMessage());
                 return;
             }
-        } catch (InvalidValueException e) {
+        } catch (CodecException e) {
             LOG.warn("Unable to decode payload to create", e);
             exchange.respond(ResponseCode.BAD_REQUEST);
             return;
@@ -307,7 +301,7 @@ public class ObjectResource extends CoapResource implements NotifySender {
     }
 
     @Override
-    public void handleDELETE(final CoapExchange coapExchange) {
+    public void handleDELETE(CoapExchange coapExchange) {
         // Manage Delete Request
         String URI = coapExchange.getRequestOptions().getUriPathString();
         ServerIdentity identity = extractServerIdentity(coapExchange, bootstrapHandler);

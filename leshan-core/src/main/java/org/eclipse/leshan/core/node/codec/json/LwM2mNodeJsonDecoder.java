@@ -38,7 +38,7 @@ import org.eclipse.leshan.core.node.LwM2mPath;
 import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.node.LwM2mSingleResource;
 import org.eclipse.leshan.core.node.TimestampedLwM2mNode;
-import org.eclipse.leshan.core.node.codec.InvalidValueException;
+import org.eclipse.leshan.core.node.codec.CodecException;
 import org.eclipse.leshan.json.JsonArrayEntry;
 import org.eclipse.leshan.json.JsonRootObject;
 import org.eclipse.leshan.json.LwM2mJson;
@@ -53,7 +53,7 @@ public class LwM2mNodeJsonDecoder {
 
     @SuppressWarnings("unchecked")
     public static <T extends LwM2mNode> T decode(byte[] content, LwM2mPath path, LwM2mModel model, Class<T> nodeClass)
-            throws InvalidValueException {
+            throws CodecException {
         try {
             String jsonStrValue = content != null ? new String(content) : "";
             JsonRootObject json = LwM2mJson.fromJsonLwM2m(jsonStrValue);
@@ -65,23 +65,23 @@ public class LwM2mNodeJsonDecoder {
                 return (T) timestampedNodes.get(0).getNode();
             }
         } catch (LwM2mJsonException e) {
-            throw new InvalidValueException("Unable to deSerialize json", path, e);
+            throw new CodecException(String.format("Unable to deserialize json [path:%s]", path), e);
         }
     }
 
     public static List<TimestampedLwM2mNode> decodeTimestamped(byte[] content, LwM2mPath path, LwM2mModel model,
-            Class<? extends LwM2mNode> nodeClass) throws InvalidValueException {
+            Class<? extends LwM2mNode> nodeClass) throws CodecException {
         try {
             String jsonStrValue = new String(content);
             JsonRootObject json = LwM2mJson.fromJsonLwM2m(jsonStrValue);
             return parseJSON(json, path, model, nodeClass);
         } catch (LwM2mJsonException e) {
-            throw new InvalidValueException("Unable to deSerialize json", path, e);
+            throw new CodecException(String.format("Unable to deserialize json [path:%s]", path), e);
         }
     }
 
     private static List<TimestampedLwM2mNode> parseJSON(JsonRootObject jsonObject, LwM2mPath path, LwM2mModel model,
-            Class<? extends LwM2mNode> nodeClass) throws InvalidValueException {
+            Class<? extends LwM2mNode> nodeClass) throws CodecException {
 
         LOG.trace("Parsing JSON content for path {}: {}", path, jsonObject);
 
@@ -116,7 +116,8 @@ public class LwM2mNodeJsonDecoder {
             } else if (nodeClass == LwM2mObjectInstance.class) {
                 // validate we have resources for only 1 instance
                 if (jsonEntryByInstanceId.size() > 1)
-                    throw new InvalidValueException("Only one instance expected in the payload", path);
+                    throw new CodecException(
+                            String.format("Only one instance expected in the payload [path:%s]", path));
 
                 // Extract resources
                 Entry<Integer, Collection<JsonArrayEntry>> instanceEntry = jsonEntryByInstanceId.entrySet().iterator()
@@ -129,7 +130,8 @@ public class LwM2mNodeJsonDecoder {
             } else if (nodeClass == LwM2mResource.class) {
                 // validate we have resources for only 1 instance
                 if (jsonEntryByInstanceId.size() > 1)
-                    throw new InvalidValueException("Only one instance expected in the payload", path);
+                    throw new CodecException(
+                            String.format("Only one instance expected in the payload [path:%s]", path));
 
                 // Extract resources
                 Map<Integer, LwM2mResource> resourcesMap = extractLwM2mResources(
@@ -137,7 +139,8 @@ public class LwM2mNodeJsonDecoder {
 
                 // validate there is only 1 resource
                 if (resourcesMap.size() != 1)
-                    throw new InvalidValueException("Only one resource should be present in the payload", path);
+                    throw new CodecException(
+                            String.format("Only one resource should be present in the payload [path:%s]", path));
 
                 node = resourcesMap.values().iterator().next();
             } else {
@@ -196,7 +199,7 @@ public class LwM2mNodeJsonDecoder {
             // Get jsonArray for this time-stamp
             Collection<JsonArrayEntry> jsonArray = result.get(time);
             if (jsonArray == null) {
-                jsonArray = new ArrayList<JsonArrayEntry>();
+                jsonArray = new ArrayList<>();
                 result.put(time, jsonArray);
             }
 
@@ -217,7 +220,7 @@ public class LwM2mNodeJsonDecoder {
      * @return a map (instanceId => collection of JsonArrayEntry)
      */
     private static Map<Integer, Collection<JsonArrayEntry>> groupJsonEntryByInstanceId(
-            Collection<JsonArrayEntry> jsonEntries, LwM2mPath baseName) throws InvalidValueException {
+            Collection<JsonArrayEntry> jsonEntries, LwM2mPath baseName) throws CodecException {
         Map<Integer, Collection<JsonArrayEntry>> result = new HashMap<>();
 
         for (JsonArrayEntry e : jsonEntries) {
@@ -226,8 +229,9 @@ public class LwM2mNodeJsonDecoder {
 
             // Validate path
             if (!nodePath.isResourceInstance() && !nodePath.isResource()) {
-                throw new InvalidValueException(
-                        "Invalid path for resource, it should be a resource or a resource instance path", nodePath);
+                throw new CodecException(String.format(
+                        "Invalid path [%s] for resource, it should be a resource or a resource instance path",
+                        nodePath));
             }
 
             // Get jsonArray for this instance
@@ -245,7 +249,7 @@ public class LwM2mNodeJsonDecoder {
     }
 
     private static LwM2mPath extractAndValidateBaseName(JsonRootObject jsonObject, LwM2mPath requestPath)
-            throws InvalidValueException {
+            throws CodecException {
         // Check baseName is valid
         if (jsonObject.getBaseName() != null && !jsonObject.getBaseName().isEmpty()) {
             LwM2mPath bnPath = new LwM2mPath(jsonObject.getBaseName());
@@ -253,15 +257,18 @@ public class LwM2mNodeJsonDecoder {
             // check returned base name path is under requested path
             if (requestPath.getObjectId() != null && bnPath.getObjectId() != null) {
                 if (!bnPath.getObjectId().equals(requestPath.getObjectId())) {
-                    throw new InvalidValueException("Basename path does not match requested path.", bnPath);
+                    throw new CodecException(String.format("Basename path [%s] does not match requested path [%s].",
+                            bnPath, requestPath));
                 }
                 if (requestPath.getObjectInstanceId() != null && bnPath.getObjectInstanceId() != null) {
                     if (!bnPath.getObjectInstanceId().equals(requestPath.getObjectInstanceId())) {
-                        throw new InvalidValueException("Basename path does not match requested path.", bnPath);
+                        throw new CodecException(String.format("Basename path [%s] does not match requested path [%s].",
+                                bnPath, requestPath));
                     }
                     if (requestPath.getResourceId() != null && bnPath.getResourceId() != null) {
                         if (!bnPath.getResourceId().equals(requestPath.getResourceId())) {
-                            throw new InvalidValueException("Basename path does not match requested path.", bnPath);
+                            throw new CodecException(String.format(
+                                    "Basename path [%s] does not match requested path [%s].", bnPath, requestPath));
                         }
                     }
                 }
@@ -273,7 +280,7 @@ public class LwM2mNodeJsonDecoder {
     }
 
     private static Map<Integer, LwM2mResource> extractLwM2mResources(Collection<JsonArrayEntry> jsonArrayEntries,
-            LwM2mPath baseName, LwM2mModel model) throws InvalidValueException {
+            LwM2mPath baseName, LwM2mModel model) throws CodecException {
         if (jsonArrayEntries == null)
             return Collections.emptyMap();
 
@@ -305,8 +312,9 @@ public class LwM2mNodeJsonDecoder {
                         parseJsonValue(resourceElt.getResourceValue(), expectedType, nodePath), expectedType);
                 lwM2mResourceMap.put(nodePath.getResourceId(), res);
             } else {
-                throw new InvalidValueException(
-                        "Invalid path for resource, it should be a resource or a resource instance path", nodePath);
+                throw new CodecException(String.format(
+                        "Invalid path [%s] for resource, it should be a resource or a resource instance path",
+                        nodePath));
             }
         }
 
@@ -331,7 +339,7 @@ public class LwM2mNodeJsonDecoder {
         return lwM2mResourceMap;
     }
 
-    private static Object parseJsonValue(Object value, Type expectedType, LwM2mPath path) throws InvalidValueException {
+    private static Object parseJsonValue(Object value, Type expectedType, LwM2mPath path) throws CodecException {
 
         LOG.trace("JSON value for path {} and expected type {}: {}", path, expectedType, value);
 
@@ -346,7 +354,6 @@ public class LwM2mNodeJsonDecoder {
                 // JSON format specs said v = integer or float
                 return ((Number) value).doubleValue();
             case TIME:
-                // TODO Specs page 44, Resource 13 (current time) of device object represented as Float value
                 return new Date(((Number) value).longValue() * 1000L);
             case OPAQUE:
                 // If the Resource data type is opaque the string value
@@ -355,15 +362,15 @@ public class LwM2mNodeJsonDecoder {
             case STRING:
                 return value;
             default:
-                throw new InvalidValueException("Unsupported type " + expectedType, path);
+                throw new CodecException(String.format("Unsupported type %s for path %s", expectedType, path));
             }
         } catch (Exception e) {
-            throw new InvalidValueException("Invalid content for type " + expectedType, path, e);
+            throw new CodecException(
+                    String.format("Invalid content [%s] for type %s for path %s", value, expectedType, path), e);
         }
     }
 
-    public static Type getResourceType(LwM2mPath rscPath, LwM2mModel model, JsonArrayEntry resourceElt)
-            throws InvalidValueException {
+    public static Type getResourceType(LwM2mPath rscPath, LwM2mModel model, JsonArrayEntry resourceElt) {
         ResourceModel rscDesc = model.getResourceModel(rscPath.getObjectId(), rscPath.getResourceId());
         if (rscDesc == null || rscDesc.type == null) {
             Type type = resourceElt.getType();

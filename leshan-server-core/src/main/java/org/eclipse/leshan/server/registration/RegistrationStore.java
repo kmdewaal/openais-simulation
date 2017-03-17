@@ -17,10 +17,9 @@ package org.eclipse.leshan.server.registration;
 
 import java.net.InetSocketAddress;
 import java.util.Collection;
+import java.util.Iterator;
 
 import org.eclipse.leshan.core.observation.Observation;
-import org.eclipse.leshan.server.client.Registration;
-import org.eclipse.leshan.server.client.RegistrationUpdate;
 
 /**
  * A store for registrations and observations. This interface is also responsible to handle registration expiration.
@@ -28,10 +27,13 @@ import org.eclipse.leshan.server.client.RegistrationUpdate;
 public interface RegistrationStore {
 
     /**
-     * Add a new registration. If there is already a registration with the same endpoint removed it.
+     * Store a new registration.
+     * 
+     * If a registration already exists with the given endpoint, the store is in charge of removing this registration as
+     * well as the ongoing observations.
      * 
      * @param registration the new registration.
-     * @return the old registration and its observations removed or null.
+     * @return the old registration and its observations or <code>null</code> if it does not already exists.
      */
     Deregistration addRegistration(Registration registration);
 
@@ -65,15 +67,15 @@ public interface RegistrationStore {
      * @param address of the client registered.
      * @return the registration or null if there is no client registered with this socket address.
      */
-    Collection<Registration> getRegistrationByAdress(InetSocketAddress address);
+    Registration getRegistrationByAdress(InetSocketAddress address);
 
     /**
-     * @return all registrations in this store.
-     * @Deprecated should be replaced by an iterator.
+     * Returns an iterator over the registration of this store. There are no guarantees concerning the order in which
+     * the elements are returned (unless the implementation provides a guarantee).
+     *
+     * @return an <tt>Iterator</tt> over the registration in this store
      */
-    // TODO Should be replaced by an iterator.
-    @Deprecated
-    Collection<Registration> getAllRegistration();
+    Iterator<Registration> getAllRegistrations();
 
     /**
      * Remove the registration with the given registration Id
@@ -84,14 +86,16 @@ public interface RegistrationStore {
     Deregistration removeRegistration(String registrationId);
 
     /**
-     * Add a new Observation for a given registration.
+     * Add a new {@link Observation} for a given registration.
+     * 
+     * The store is in charge of removing the observations already existing for the same path and registration id.
      * 
      * @param registrationId the id of the registration
      * @param observation the observation to add
      * 
-     * @return the previous observation or null if any.
+     * @return the list of removed observations or an empty list if none were removed.
      */
-    Observation addObservation(String registrationId, Observation observation);
+    Collection<Observation> addObservation(String registrationId, Observation observation);
 
     /**
      * Get the observation for the given registration with the given observationId

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016 Sierra Wireless and others.
+ * Copyright (c) 2013-2015 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
@@ -13,18 +13,20 @@
  * Contributors:
  *     Sierra Wireless - initial API and implementation
  *******************************************************************************/
-package org.eclipse.leshan.server.registration;
-
-import java.util.Collection;
-
-import org.eclipse.leshan.core.observation.Observation;
+package org.eclipse.leshan.core.node.codec;
 
 /**
- * A listener to be aware of registration expiration.
- * 
- * @see RegistrationStore
+ * Thrown if a problem occurs during LWM2M node encoding or decoding.
  */
-public interface ExpirationListener {
+public class CodecException extends RuntimeException {
 
-    void registrationExpired(Registration registration, Collection<Observation> observations);
+    private static final long serialVersionUID = 1L;
+
+    public CodecException(String message) {
+        super(message);
+    }
+
+    public CodecException(String message, Exception e) {
+        super(message, e);
+    }
 }

@@ -16,27 +16,22 @@
 package org.eclipse.leshan.server.impl;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.eclipse.leshan.core.observation.Observation;
-import org.eclipse.leshan.server.client.Registration;
-import org.eclipse.leshan.server.client.RegistrationListener;
-import org.eclipse.leshan.server.client.RegistrationService;
-import org.eclipse.leshan.server.client.RegistrationUpdate;
-import org.eclipse.leshan.server.registration.Deregistration;
 import org.eclipse.leshan.server.registration.ExpirationListener;
+import org.eclipse.leshan.server.registration.Registration;
+import org.eclipse.leshan.server.registration.RegistrationListener;
+import org.eclipse.leshan.server.registration.RegistrationService;
 import org.eclipse.leshan.server.registration.RegistrationStore;
-import org.eclipse.leshan.util.Validate;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.eclipse.leshan.server.registration.RegistrationUpdate;
 
 /**
  * An implementation of {@link RegistrationService}
  */
 public class RegistrationServiceImpl implements RegistrationService, ExpirationListener {
-
-    private static final Logger LOG = LoggerFactory.getLogger(RegistrationServiceImpl.class);
 
     private final List<RegistrationListener> listeners = new CopyOnWriteArrayList<>();
 
@@ -58,63 +53,13 @@ public class RegistrationServiceImpl implements RegistrationService, ExpirationL
     }
 
     @Override
-    public Collection<Registration> getAllRegistrations() {
-        return store.getAllRegistration();
+    public Iterator<Registration> getAllRegistrations() {
+        return store.getAllRegistrations();
     }
 
     @Override
     public Registration getByEndpoint(String endpoint) {
         return store.getRegistrationByEndpoint(endpoint);
-    }
-
-    public boolean registerClient(Registration registration) {
-        Validate.notNull(registration);
-
-        LOG.debug("Registering new client: {}", registration);
-
-        Deregistration previous = store.addRegistration(registration);
-        if (previous != null) {
-            for (RegistrationListener l : listeners) {
-                l.unregistered(previous.getRegistration());
-            }
-        }
-        for (RegistrationListener l : listeners) {
-            l.registered(registration);
-        }
-
-        return true;
-    }
-
-    public Registration updateRegistration(RegistrationUpdate update) {
-        Validate.notNull(update);
-
-        LOG.debug("Updating registration for client: {}", update);
-        Registration updatedRegistration = store.updateRegistration(update);
-        if (updatedRegistration != null) {
-            // notify listener
-            for (RegistrationListener l : listeners) {
-                l.updated(update, updatedRegistration);
-            }
-            return updatedRegistration;
-        }
-        return null;
-    }
-
-    public Registration deregisterClient(String registrationId) {
-        Validate.notNull(registrationId);
-
-        LOG.debug("Deregistering client with registrationId: {}", registrationId);
-
-        Deregistration unregistered = store.removeRegistration(registrationId);
-        for (RegistrationListener l : listeners) {
-            l.unregistered(unregistered.getRegistration());
-        }
-        LOG.debug("Deregistered client: {}", unregistered);
-        return unregistered.getRegistration();
-    }
-
-    public RegistrationStore getStore() {
-        return store;
     }
 
     @Override
@@ -123,9 +68,31 @@ public class RegistrationServiceImpl implements RegistrationService, ExpirationL
     }
 
     @Override
-    public void registrationExpired(Registration registration, Collection<Observation> observation) {
+    public void registrationExpired(Registration registration, Collection<Observation> observations) {
         for (RegistrationListener l : listeners) {
-            l.unregistered(registration);
+            l.unregistered(registration, observations);
         }
+    }
+
+    public void fireRegistred(Registration registration) {
+        for (RegistrationListener l : listeners) {
+            l.registered(registration);
+        }
+    }
+
+    public void fireUnregistered(Registration registration, Collection<Observation> observations) {
+        for (RegistrationListener l : listeners) {
+            l.unregistered(registration, observations);
+        }
+    }
+
+    public void fireUpdated(RegistrationUpdate update, Registration registration) {
+        for (RegistrationListener l : listeners) {
+            l.updated(update, registration);
+        }
+    }
+
+    public RegistrationStore getStore() {
+        return store;
     }
 }

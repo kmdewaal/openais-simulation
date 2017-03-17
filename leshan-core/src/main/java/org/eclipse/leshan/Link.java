@@ -16,12 +16,12 @@
 package org.eclipse.leshan;
 
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.eclipse.leshan.util.Charsets;
 import org.eclipse.leshan.util.StringUtils;
 
 /**
@@ -54,7 +54,7 @@ public class Link implements Serializable {
     public Link(String url, Map<String, ?> attributes) {
         this.url = url;
         if (attributes != null) {
-            this.attributes = Collections.unmodifiableMap(new HashMap<String, Object>(attributes));
+            this.attributes = Collections.unmodifiableMap(new HashMap<>(attributes));
         } else {
             this.attributes = Collections.unmodifiableMap(new HashMap<String, Object>());
         }
@@ -75,12 +75,12 @@ public class Link implements Serializable {
 
     @Override
     public String toString() {
-        final StringBuilder builder = new StringBuilder();
+        StringBuilder builder = new StringBuilder();
         builder.append('<');
         builder.append(getUrl());
         builder.append('>');
 
-        final Map<String, Object> attributes = getAttributes();
+        Map<String, Object> attributes = getAttributes();
         if (attributes != null && !attributes.isEmpty()) {
             for (Entry<String, Object> entry : attributes.entrySet()) {
                 builder.append(";");
@@ -102,7 +102,7 @@ public class Link implements Serializable {
         if (content == null) {
             return new Link[] {};
         }
-        String s = new String(content, Charsets.UTF_8);
+        String s = new String(content, StandardCharsets.UTF_8);
         String[] links = s.split(",");
         Link[] linksResult = new Link[links.length];
         int index = 0;
@@ -146,15 +146,15 @@ public class Link implements Serializable {
 
     public static String serialize(Link... linkObjects) {
         try {
-            final StringBuilder builder = new StringBuilder();
-            for (final Link link : linkObjects) {
+            StringBuilder builder = new StringBuilder();
+            for (Link link : linkObjects) {
                 builder.append(link.toString()).append(TRAILER);
             }
 
             builder.delete(builder.length() - TRAILER.length(), builder.length());
 
             return builder.toString();
-        } catch (final Exception e) {
+        } catch (Exception e) {
             return null;
         }
     }

@@ -37,8 +37,8 @@ public class ObjectsInitializer {
         }
     };
 
-    protected Map<Integer, LwM2mInstanceEnablerFactory> factories = new HashMap<Integer, LwM2mInstanceEnablerFactory>();
-    protected Map<Integer, LwM2mInstanceEnabler[]> instances = new HashMap<Integer, LwM2mInstanceEnabler[]>();
+    protected Map<Integer, LwM2mInstanceEnablerFactory> factories = new HashMap<>();
+    protected Map<Integer, LwM2mInstanceEnabler[]> instances = new HashMap<>();
     protected LwM2mModel model;
 
     public ObjectsInitializer() {
@@ -55,8 +55,8 @@ public class ObjectsInitializer {
 
     public void setFactoryForObject(int objectId, LwM2mInstanceEnablerFactory factory) {
         if (model.getObjectModel(objectId) == null) {
-            throw new IllegalArgumentException("Cannot set Instance Factory for Object " + objectId
-                    + " because no model is defined for this id.");
+            throw new IllegalArgumentException(
+                    "Cannot set Instance Factory for Object " + objectId + " because no model is defined for this id.");
         }
         Validate.notNull(factory);
         factories.put(objectId, factory);
@@ -76,8 +76,8 @@ public class ObjectsInitializer {
     public void setInstancesForObject(int objectId, LwM2mInstanceEnabler... instances) {
         ObjectModel objectModel = model.getObjectModel(objectId);
         if (objectModel == null) {
-            throw new IllegalArgumentException("Cannot set Instances Class for Object " + objectId
-                    + " because no model is defined for this id.");
+            throw new IllegalArgumentException(
+                    "Cannot set Instances Class for Object " + objectId + " because no model is defined for this id.");
         }
         Validate.notNull(instances);
         Validate.notEmpty(instances);
@@ -91,7 +91,7 @@ public class ObjectsInitializer {
     public List<LwM2mObjectEnabler> createMandatory() {
         Collection<ObjectModel> objectModels = model.getObjectModels();
 
-        List<LwM2mObjectEnabler> enablers = new ArrayList<LwM2mObjectEnabler>();
+        List<LwM2mObjectEnabler> enablers = new ArrayList<>();
         for (ObjectModel objectModel : objectModels) {
             if (objectModel.mandatory) {
                 ObjectEnabler objectEnabler = createNodeEnabler(objectModel);
@@ -105,16 +105,16 @@ public class ObjectsInitializer {
     public LwM2mObjectEnabler create(int objectId) {
         ObjectModel objectModel = model.getObjectModel(objectId);
         if (objectModel == null) {
-            throw new IllegalArgumentException("Cannot create object for id " + objectId
-                    + " because no model is defined for this id.");
+            throw new IllegalArgumentException(
+                    "Cannot create object for id " + objectId + " because no model is defined for this id.");
         }
         return createNodeEnabler(objectModel);
     }
 
     public List<LwM2mObjectEnabler> create(int... objectId) {
-        List<LwM2mObjectEnabler> enablers = new ArrayList<LwM2mObjectEnabler>();
-        for (int i = 0; i < objectId.length; i++) {
-            LwM2mObjectEnabler objectEnabler = create(objectId[i]);
+        List<LwM2mObjectEnabler> enablers = new ArrayList<>();
+        for (int anObjectId : objectId) {
+            LwM2mObjectEnabler objectEnabler = create(anObjectId);
             if (objectEnabler != null)
                 enablers.add(objectEnabler);
         }
@@ -146,7 +146,7 @@ public class ObjectsInitializer {
     }
 
     protected ObjectEnabler createNodeEnabler(ObjectModel objectModel) {
-        final Map<Integer, LwM2mInstanceEnabler> instances = new HashMap<Integer, LwM2mInstanceEnabler>();
+        Map<Integer, LwM2mInstanceEnabler> instances = new HashMap<>();
         LwM2mInstanceEnabler[] newInstances = createInstances(objectModel);
         for (int i = 0; i < newInstances.length; i++) {
             instances.put(i, newInstances[i]);

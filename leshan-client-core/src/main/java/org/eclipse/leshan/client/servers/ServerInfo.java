@@ -19,6 +19,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 
+import org.eclipse.leshan.LwM2m;
+import org.eclipse.leshan.SecurityMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,8 +30,7 @@ public class ServerInfo {
 
     public long serverId;
     public URI serverUri;
-    // TODO use SecureMode from server.core
-    public long secureMode;
+    public SecurityMode secureMode;
 
     public InetSocketAddress getAddress() {
         return getAddress(serverUri);
@@ -40,7 +41,7 @@ public class ServerInfo {
     }
 
     public boolean isSecure() {
-        return secureMode != 3;
+        return secureMode != SecurityMode.NO_SEC;
     }
 
     @Override
@@ -53,17 +54,17 @@ public class ServerInfo {
         int port = serverUri.getPort();
         if (port == -1) {
             if ("coap".equals(serverUri.getScheme())) {
-                port = 5683;
+                port = LwM2m.DEFAULT_COAP_PORT;
             } else if ("coaps".equals(serverUri.getScheme())) {
-                port = 5684;
+                port = LwM2m.DEFAULT_COAP_SECURE_PORT;
             }
         }
         // define scheme
         String scheme = serverUri.getScheme();
         if (scheme == null) {
-            if (port == 5683) {
+            if (port == LwM2m.DEFAULT_COAP_PORT) {
                 scheme = "coap";
-            } else if (port == 5684) {
+            } else if (port == LwM2m.DEFAULT_COAP_SECURE_PORT) {
                 scheme = "coaps";
             }
         }

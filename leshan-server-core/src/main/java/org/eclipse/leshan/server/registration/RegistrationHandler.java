@@ -25,9 +25,6 @@ import org.eclipse.leshan.core.request.UpdateRequest;
 import org.eclipse.leshan.core.response.DeregisterResponse;
 import org.eclipse.leshan.core.response.RegisterResponse;
 import org.eclipse.leshan.core.response.UpdateResponse;
-import org.eclipse.leshan.server.client.Registration;
-import org.eclipse.leshan.server.client.RegistrationService;
-import org.eclipse.leshan.server.client.RegistrationUpdate;
 import org.eclipse.leshan.server.impl.RegistrationServiceImpl;
 import org.eclipse.leshan.server.security.Authorizer;
 import org.eclipse.leshan.util.RandomStringUtils;
@@ -50,7 +47,8 @@ public class RegistrationHandler {
         this.authorizer = authorizer;
     }
 
-    public RegisterResponse register(Identity sender, RegisterRequest registerRequest, InetSocketAddress serverEndpoint) {
+    public RegisterResponse register(Identity sender, RegisterRequest registerRequest,
+            InetSocketAddress serverEndpoint) {
 
         Registration.Builder builder = new Registration.Builder(RegistrationHandler.createRegistrationId(),
                 registerRequest.getEndpointName(), sender.getPeerAddress().getAddress(), sender.getPeerAddress()
@@ -68,12 +66,17 @@ public class RegistrationHandler {
             return RegisterResponse.forbidden(null);
         }
 
-        if (registrationService.registerClient(registration)) {
-            LOG.debug("New registered client: {}", registration);
-            return RegisterResponse.success(registration.getId());
-        } else {
-            return RegisterResponse.forbidden(null);
+        // Add registration to the store
+        Deregistration deregistration = registrationService.getStore().addRegistration(registration);
+
+        // notify new registration and de-registration
+        LOG.debug("New registration: {}", registration);
+        if (deregistration != null) {
+            registrationService.fireUnregistered(deregistration.getRegistration(), deregistration.getObservations());
         }
+        registrationService.fireRegistred(registration);
+            
+        return RegisterResponse.success(registration.getId());
     }
 
     public UpdateResponse update(Identity sender, UpdateRequest updateRequest) {
@@ -83,18 +86,27 @@ public class RegistrationHandler {
         if (registration == null) {
             return UpdateResponse.notFound();
         }
+
         if (!authorizer.isAuthorized(updateRequest, registration, sender)) {
             // TODO replace by Forbidden if https://github.com/OpenMobileAlliance/OMA_LwM2M_for_Developers/issues/181 is
             // closed.
             return UpdateResponse.badRequest("forbidden");
         }
 
-        registration = registrationService.updateRegistration(new RegistrationUpdate(updateRequest.getRegistrationId(), sender
+        // Create update
+        RegistrationUpdate update = new RegistrationUpdate(updateRequest.getRegistrationId(), sender
                 .getPeerAddress().getAddress(), sender.getPeerAddress().getPort(), updateRequest.getLifeTimeInSec(),
-                updateRequest.getSmsNumber(), updateRequest.getBindingMode(), updateRequest.getObjectLinks()));
-        if (registration == null) {
+                updateRequest.getSmsNumber(), updateRequest.getBindingMode(), updateRequest.getObjectLinks());
+
+        // update registration
+        Registration updatedRegistration = registrationService.getStore().updateRegistration(update);
+        if (updatedRegistration == null) {
+            LOG.debug("Invalid update:  registration {} not found", registration.getId());
             return UpdateResponse.notFound();
         } else {
+            LOG.debug("Updated registration {} by {}", updatedRegistration, update);
+            // notify registration update
+            registrationService.fireUpdated(update, updatedRegistration);
             return UpdateResponse.success();
         }
     }
@@ -112,11 +124,16 @@ public class RegistrationHandler {
             return DeregisterResponse.badRequest("forbidden");
         }
 
-        Registration unregistered = registrationService.deregisterClient(deregisterRequest.getRegistrationId());
-        if (unregistered != null) {
+        Deregistration deregistration = registrationService.getStore()
+                .removeRegistration(deregisterRequest.getRegistrationId());
+
+        if (deregistration != null) {
+            LOG.debug("Deregistered client: {}", deregistration.getRegistration());
+            // notify new de-registration
+            registrationService.fireUnregistered(deregistration.getRegistration(), deregistration.getObservations());
             return DeregisterResponse.success();
         } else {
-            LOG.debug("Invalid deregistration");
+            LOG.debug("Invalid deregistration :  registration {} not found", registration.getId());
             return DeregisterResponse.notFound();
         }
     }

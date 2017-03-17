@@ -15,17 +15,20 @@
  *******************************************************************************/
 package org.eclipse.leshan.server.cluster;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.eclipse.leshan.server.californium.impl.CoapRequestBuilder.*;
-import static org.eclipse.leshan.util.Charsets.UTF_8;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -37,12 +40,13 @@ import org.eclipse.leshan.server.Startable;
 import org.eclipse.leshan.server.Stoppable;
 import org.eclipse.leshan.server.californium.CaliforniumRegistrationStore;
 import org.eclipse.leshan.server.californium.impl.CoapRequestBuilder;
-import org.eclipse.leshan.server.client.Registration;
-import org.eclipse.leshan.server.client.RegistrationUpdate;
-import org.eclipse.leshan.server.cluster.serialization.RegistrationSerDes;
 import org.eclipse.leshan.server.cluster.serialization.ObservationSerDes;
+import org.eclipse.leshan.server.cluster.serialization.RegistrationSerDes;
 import org.eclipse.leshan.server.registration.Deregistration;
 import org.eclipse.leshan.server.registration.ExpirationListener;
+import org.eclipse.leshan.server.registration.Registration;
+import org.eclipse.leshan.server.registration.RegistrationUpdate;
+import org.eclipse.leshan.util.NamedThreadFactory;
 import org.eclipse.leshan.util.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,8 +75,23 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
     // Listener use to notify when a registration expires
     private ExpirationListener expirationListener;
 
+    private final ScheduledExecutorService schedExecutor;
+    private final long cleanPeriod; // in seconds
+
     public RedisRegistrationStore(Pool<Jedis> p) {
+        this(p, 60); // default clean period 60s
+    }
+
+    public RedisRegistrationStore(Pool<Jedis> p, long cleanPeriodInSec) {
+        this(p, Executors.newScheduledThreadPool(1,
+                new NamedThreadFactory(String.format("RedisRegistrationStore Cleaner (%ds)", cleanPeriodInSec))),
+                cleanPeriodInSec);
+    }
+
+    public RedisRegistrationStore(Pool<Jedis> p, ScheduledExecutorService schedExecutor, long cleanPeriodInSec) {
         this.pool = p;
+        this.schedExecutor = schedExecutor;
+        this.cleanPeriod = cleanPeriodInSec;
     }
 
     /* *************** Redis Key utility function **************** */
@@ -117,8 +136,7 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
 
                 if (old != null) {
                     Registration oldRegistration = deserializeReg(old);
-                    Collection<Observation> obsRemoved = unsafeRemoveAllObservations(j,
-                            oldRegistration.getId());
+                    Collection<Observation> obsRemoved = unsafeRemoveAllObservations(j, oldRegistration.getId());
                     return new Deregistration(oldRegistration, obsRemoved);
                 }
 
@@ -195,31 +213,69 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
     }
 
     @Override
-    public Collection<Registration> getRegistrationByAdress(InetSocketAddress address) {
-        // TODO Auto-generated method stub
+    public Registration getRegistrationByAdress(InetSocketAddress address) {
+        // TODO we should create an index instead of iterate all over the collection
+        for (Iterator<Registration> iterator = getAllRegistrations(); iterator.hasNext();) {
+            Registration r = iterator.next();
+            if (address.getPort() == r.getPort() && address.getAddress().equals(r.getAddress())) {
+                return r;
+            }
+        }
         return null;
     }
 
     @Override
-    public Collection<Registration> getAllRegistration() {
-        try (Jedis j = pool.getResource()) {
-            ScanParams params = new ScanParams().match(EP_REG + "*").count(100);
-            Collection<Registration> list = new LinkedList<>();
-            String cursor = "0";
-            do {
-                ScanResult<byte[]> res = j.scan(cursor.getBytes(), params);
-                for (byte[] key : res.getResult()) {
-                    byte[] element = j.get(key);
-                    if (element != null) {
-                        Registration r = deserializeReg(element);
-                        if (r.isAlive()) {
-                            list.add(r);
-                        }
-                    }
+    public Iterator<Registration> getAllRegistrations() {
+        return new RedisIterator(pool, new ScanParams().match(EP_REG + "*").count(100));
+    }
+
+    protected class RedisIterator implements Iterator<Registration> {
+
+        private Pool<Jedis> pool;
+        private ScanParams scanParams;
+
+        String cursor;
+        List<byte[]> results;
+
+        public RedisIterator(Pool<Jedis> p, ScanParams scanParams) {
+            pool = p;
+            this.scanParams = scanParams;
+            // init scan result
+            scanNext("0");
+        }
+
+        private void scanNext(String cursor) {
+            try (Jedis j = pool.getResource()) {
+                ScanResult<byte[]> sr = j.scan(cursor.getBytes(), scanParams);
+                this.results = new ArrayList<>(sr.getResult());
+                this.cursor = sr.getStringCursor();
+            }
+        }
+
+        @Override
+        public boolean hasNext() {
+            try (Jedis j = pool.getResource()) {
+                return !results.isEmpty() || !"0".equals(cursor);
+            }
+        }
+
+        @Override
+        public Registration next() {
+            try (Jedis j = pool.getResource()) {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
                 }
-                cursor = res.getStringCursor();
-            } while (!"0".equals(cursor));
-            return list;
+                if (results.isEmpty()) {
+                    scanNext(cursor);
+                }
+
+                return deserializeReg(j.get(results.remove(0)));
+            }
+        }
+
+        @Override
+        public void remove() {
+            throw new UnsupportedOperationException();
         }
     }
 
@@ -284,10 +340,47 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
 
     /* *************** Leshan Observation API **************** */
 
+    /*
+     * The observation is not persisted here, it is done by the Californium layer (in the implementation of the
+     * org.eclipse.californium.core.observe.ObservationStore#add method)
+     */
     @Override
-    public Observation addObservation(String registrationId, Observation observation) {
-        // not used observation was added by Californium
-        return null;
+    public Collection<Observation> addObservation(String registrationId, Observation observation) {
+
+        List<Observation> removed = new ArrayList<>();
+
+        if (!removed.isEmpty()) {
+            try (Jedis j = pool.getResource()) {
+
+                // fetch the client ep by registration ID index
+                byte[] ep = j.get(toRegIdKey(registrationId));
+                if (ep == null) {
+                    return null;
+                }
+
+                byte[] lockValue = null;
+                byte[] lockKey = toLockKey(ep);
+
+                try {
+                    lockValue = RedisLock.acquire(j, lockKey);
+
+                    // cancel existing observations for the same path and registration id.
+                    for (Observation obs : getObservations(j, registrationId)) {
+                        if (observation.getPath().equals(obs.getPath())
+                                && !Arrays.equals(observation.getId(), obs.getId())) {
+                            removed.add(obs);
+                            unsafeRemoveObservation(j, registrationId, obs.getId());
+                        }
+                    }
+
+                } finally {
+                    RedisLock.release(j, lockKey, lockValue);
+                }
+            }
+        }
+
+        return removed;
+
     }
 
     @Override
@@ -326,13 +419,17 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
 
     @Override
     public Collection<Observation> getObservations(String registrationId) {
-        Collection<Observation> result = new ArrayList<>();
         try (Jedis j = pool.getResource()) {
-            for (byte[] token : j.lrange(toKey(OBS_REGID, registrationId), 0, -1)) {
-                byte[] obs = j.get(toKey(OBS_TKN, token));
-                if (obs != null) {
-                    result.add(build(deserializeObs(obs)));
-                }
+            return getObservations(j, registrationId);
+        }
+    }
+
+    private Collection<Observation> getObservations(Jedis j, String registrationId) {
+        Collection<Observation> result = new ArrayList<>();
+        for (byte[] token : j.lrange(toKey(OBS_REGID, registrationId), 0, -1)) {
+            byte[] obs = j.get(toKey(OBS_TKN, token));
+            if (obs != null) {
+                result.add(build(deserializeObs(obs)));
             }
         }
         return result;
@@ -437,9 +534,8 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
 
     /* *************** Observation utility functions **************** */
 
-    private void unsafeRemoveObservation(Jedis j, String registrationId,
-            byte[] observationId) {
-        if (j.del(observationId) > 0L) {
+    private void unsafeRemoveObservation(Jedis j, String registrationId, byte[] observationId) {
+        if (j.del(toKey(OBS_TKN, observationId)) > 0L) {
             j.lrem(toKey(OBS_REGID, registrationId), 0, observationId);
         }
     }
@@ -453,7 +549,7 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
             byte[] obs = j.get(toKey(OBS_TKN, token));
             if (obs != null) {
                 removed.add(build(deserializeObs(obs)));
-                }
+            }
             j.del(toKey(OBS_TKN, token));
         }
         j.del(regIdKey);
@@ -525,8 +621,7 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
      */
     @Override
     public void start() {
-        // clean the registration list every minute
-        schedExecutor.scheduleAtFixedRate(new Cleaner(), 1, 1, TimeUnit.MINUTES);
+        schedExecutor.scheduleAtFixedRate(new Cleaner(), cleanPeriod, cleanPeriod, TimeUnit.SECONDS);
     }
 
     /**
@@ -541,8 +636,6 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
             LOG.warn("Clean up registration thread was interrupted.", e);
         }
     }
-
-    private final ScheduledExecutorService schedExecutor = Executors.newScheduledThreadPool(1);
 
     private class Cleaner implements Runnable {
 
@@ -565,7 +658,7 @@ public class RedisRegistrationStore implements CaliforniumRegistrationStore, Sta
                     cursor = res.getStringCursor();
                 } while (!"0".equals(cursor));
             } catch (Exception e) {
-                LOG.warn("Unexcepted Exception while registration cleaning", e);
+                LOG.warn("Unexpected Exception while registration cleaning", e);
             }
         }
     }

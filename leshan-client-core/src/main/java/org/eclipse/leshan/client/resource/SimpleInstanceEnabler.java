@@ -36,7 +36,7 @@ import org.slf4j.LoggerFactory;
 public class SimpleInstanceEnabler extends BaseInstanceEnabler {
 
     private static Logger LOG = LoggerFactory.getLogger(SimpleInstanceEnabler.class);
-    protected Map<Integer, LwM2mResource> resources = new HashMap<Integer, LwM2mResource>();
+    protected Map<Integer, LwM2mResource> resources = new HashMap<>();
     protected ObjectModel objectModel;
 
     @Override
@@ -110,7 +110,7 @@ public class SimpleInstanceEnabler extends BaseInstanceEnabler {
                 return null;
             }
         } else {
-            Map<Integer, Object> values = new HashMap<Integer, Object>();
+            Map<Integer, Object> values = new HashMap<>();
             switch (resourceModel.type) {
             case STRING:
                 values.put(0, createDefaultStringValue(objectModel, resourceModel));
@@ -161,7 +161,7 @@ public class SimpleInstanceEnabler extends BaseInstanceEnabler {
     }
 
     protected double createDefaultFloatValue(ObjectModel objectModel, ResourceModel resourceModel) {
-        return (double) Math.random() * 100;
+        return Math.random() * 100;
     }
 
     protected byte[] createDefaultOpaqueValue(ObjectModel objectModel, ResourceModel resourceModel) {

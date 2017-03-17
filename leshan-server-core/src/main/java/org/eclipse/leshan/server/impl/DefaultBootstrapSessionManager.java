@@ -35,11 +35,11 @@ import org.eclipse.leshan.server.security.SecurityInfo;
  * Nothing specific is done on session's end.
  *
  */
-public class BootstrapSessionManagerImpl implements BootstrapSessionManager {
+public class DefaultBootstrapSessionManager implements BootstrapSessionManager {
 
     private BootstrapSecurityStore bsSecurityStore;
 
-    public BootstrapSessionManagerImpl(BootstrapSecurityStore bsSecurityStore) {
+    public DefaultBootstrapSessionManager(BootstrapSecurityStore bsSecurityStore) {
         this.bsSecurityStore = bsSecurityStore;
     }
 
@@ -47,11 +47,8 @@ public class BootstrapSessionManagerImpl implements BootstrapSessionManager {
     public BootstrapSession begin(String endpoint, Identity clientIdentity) {
         List<SecurityInfo> securityInfos = bsSecurityStore.getAllByEndpoint(endpoint);
         boolean authorized = SecurityCheck.checkSecurityInfos(endpoint, clientIdentity, securityInfos);
-        if (authorized) {
-            return BootstrapSession.authorized(endpoint, clientIdentity);
-        } else {
-            return BootstrapSession.unauthorized();
-        }
+
+        return new DefaultBootstrapSession(endpoint, clientIdentity, authorized);
     }
 
     @Override

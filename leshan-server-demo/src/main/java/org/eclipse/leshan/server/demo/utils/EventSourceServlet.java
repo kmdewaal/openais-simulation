@@ -16,11 +16,11 @@
 
 package org.eclipse.leshan.server.demo.utils;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
-import java.nio.charset.Charset;
 import java.util.Enumeration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -60,7 +60,6 @@ import org.eclipse.jetty.continuation.ContinuationSupport;
  */
 @SuppressWarnings("serial")
 public abstract class EventSourceServlet extends HttpServlet {
-    private static final Charset UTF_8 = Charset.forName("UTF-8");
     private static final byte[] CRLF = new byte[] { '\r', '\n' };
     private static final byte[] EVENT_FIELD;
     private static final byte[] DATA_FIELD;
@@ -148,6 +147,7 @@ public abstract class EventSourceServlet extends HttpServlet {
             this.output = continuation.getServletResponse().getOutputStream();
         }
 
+        @Override
         public void event(String name, String data) throws IOException {
             synchronized (this) {
                 output.write(EVENT_FIELD);
@@ -157,6 +157,7 @@ public abstract class EventSourceServlet extends HttpServlet {
             }
         }
 
+        @Override
         public void data(String data) throws IOException {
             synchronized (this) {
                 BufferedReader reader = new BufferedReader(new StringReader(data));
@@ -171,6 +172,7 @@ public abstract class EventSourceServlet extends HttpServlet {
             }
         }
 
+        @Override
         public void comment(String comment) throws IOException {
             synchronized (this) {
                 output.write(COMMENT_FIELD);
@@ -181,6 +183,7 @@ public abstract class EventSourceServlet extends HttpServlet {
             }
         }
 
+        @Override
         public void run() {
             // If the other peer closes the connection, the first
             // flush() should generate a TCP reset that is detected
@@ -205,6 +208,7 @@ public abstract class EventSourceServlet extends HttpServlet {
             continuation.getServletResponse().flushBuffer();
         }
 
+        @Override
         public void close() {
             synchronized (this) {
                 closed = true;

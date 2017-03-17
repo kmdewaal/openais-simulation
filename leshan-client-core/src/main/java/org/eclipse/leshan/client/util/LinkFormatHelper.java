@@ -39,8 +39,7 @@ public final class LinkFormatHelper {
     private LinkFormatHelper() {
     }
 
-    public static Link[] getClientDescription(final Collection<LwM2mObjectEnabler> objectEnablers,
-            final String rootPath) {
+    public static Link[] getClientDescription(Collection<LwM2mObjectEnabler> objectEnablers, String rootPath) {
         List<Link> links = new ArrayList<>();
 
         // clean root path
@@ -53,8 +52,9 @@ public final class LinkFormatHelper {
         links.add(new Link(rootURL, attributes));
 
         // sort resources
-        List<LwM2mObjectEnabler> objEnablerList = new ArrayList<LwM2mObjectEnabler>(objectEnablers);
+        List<LwM2mObjectEnabler> objEnablerList = new ArrayList<>(objectEnablers);
         Collections.sort(objEnablerList, new Comparator<LwM2mObjectEnabler>() {
+            @Override
             public int compare(LwM2mObjectEnabler o1, LwM2mObjectEnabler o2) {
                 return o1.getId() - o2.getId();
             }
@@ -80,7 +80,7 @@ public final class LinkFormatHelper {
         return links.toArray(new Link[] {});
     }
 
-    public static Link[] getObjectDescription(final ObjectModel objectModel, final String root) {
+    public static Link[] getObjectDescription(ObjectModel objectModel, String root) {
         List<Link> links = new ArrayList<>();
 
         // clean root path
@@ -109,8 +109,7 @@ public final class LinkFormatHelper {
         return links.toArray(new Link[] {});
     }
 
-    public static Link getInstanceDescription(final ObjectModel objectModel, final int instanceId,
-            final String root) {
+    public static Link getInstanceDescription(ObjectModel objectModel, int instanceId, String root) {
         // clean root path
         String rootPath = root == null ? "" : root;
 
@@ -119,8 +118,7 @@ public final class LinkFormatHelper {
         return new Link(objectURL);
     }
 
-    public static Link getResourceDescription(final int objectId, final int instanceId,
-            final ResourceModel resourceModel, final String root) {
+    public static Link getResourceDescription(int objectId, int instanceId, ResourceModel resourceModel, String root) {
         // clean root path
         String rootPath = root == null ? "" : root;
 

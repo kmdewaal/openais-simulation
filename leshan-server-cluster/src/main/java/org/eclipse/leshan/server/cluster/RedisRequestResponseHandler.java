@@ -25,16 +25,17 @@ import org.eclipse.californium.core.Utils;
 import org.eclipse.leshan.core.node.LwM2mNode;
 import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.core.request.DownlinkRequest;
+import org.eclipse.leshan.core.response.ErrorCallback;
 import org.eclipse.leshan.core.response.LwM2mResponse;
 import org.eclipse.leshan.core.response.ObserveResponse;
+import org.eclipse.leshan.core.response.ResponseCallback;
 import org.eclipse.leshan.server.LwM2mServer;
-import org.eclipse.leshan.server.client.Registration;
-import org.eclipse.leshan.server.client.RegistrationService;
 import org.eclipse.leshan.server.cluster.serialization.DownlinkRequestSerDes;
 import org.eclipse.leshan.server.cluster.serialization.ResponseSerDes;
-import org.eclipse.leshan.server.observation.ObservationService;
 import org.eclipse.leshan.server.observation.ObservationListener;
-import org.eclipse.leshan.server.response.ResponseListener;
+import org.eclipse.leshan.server.observation.ObservationService;
+import org.eclipse.leshan.server.registration.Registration;
+import org.eclipse.leshan.server.registration.RegistrationService;
 import org.eclipse.leshan.util.NamedThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,33 +81,26 @@ public class RedisRequestResponseHandler {
         this.observationService.addListener(new ObservationListener() {
 
             @Override
-            public void newValue(Observation observation, ObserveResponse response) {
+            public void onResponse(Observation observation, Registration registration, ObserveResponse response) {
                 handleNotification(observation, response.getContent());
             }
 
             @Override
-            public void newObservation(Observation observation) {
+            public void onError(Observation observation, Registration registration, Exception error) {
+                if (LOG.isWarnEnabled()) {
+                    LOG.warn(String.format("Unable to handle notification of [%s:%s]", observation.getRegistrationId(),
+                            observation.getPath()), error);
+                }
+            }
+
+            @Override
+            public void newObservation(Observation observation, Registration registration) {
             }
 
             @Override
             public void cancelled(Observation observation) {
                 observatioIdToTicket.remove(new KeyId(observation.getId()));
             }
-        });
-
-        // Listen LWM2M response from client
-        this.server.addResponseListener(new ResponseListener() {
-            
-            @Override
-            public void onResponse(Registration registration, String requestTicket, LwM2mResponse response) {
-                handleResponse(registration.getEndpoint(), requestTicket, response);
-            }
-
-            @Override
-            public void onError(Registration registration, String requestTicket, Exception exception) {
-                handlerError(registration.getEndpoint(), requestTicket, exception);
-            }
-
         });
 
         // Listen redis "send request" channel
@@ -117,9 +111,10 @@ public class RedisRequestResponseHandler {
                 do {
                     try (Jedis j = pool.getResource()) {
                         j.subscribe(new JedisPubSub() {
-                            public void onMessage(String channel, final String message) {
+                            @Override
+                            public void onMessage(String channel, String message) {
                                 handleSendRequestMessage(message);
-                            };
+                            }
                         }, REQUEST_CHANNEL);
                     } catch (RuntimeException e) {
                         LOG.warn("Redis SUBSCRIBE interrupted.", e);
@@ -190,9 +185,10 @@ public class RedisRequestResponseHandler {
         });
     }
 
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     private void sendRequest(final String message) {
         // Parse JSON and extract ticket
-        String ticket;
+        final String ticket;
         JsonObject jMessage;
         try {
             jMessage = (JsonObject) Json.parse(message);
@@ -210,7 +206,7 @@ public class RedisRequestResponseHandler {
                 return;
 
             // Get the registration for this endpoint
-            Registration destination = registrationService.getByEndpoint(endpoint);
+            final Registration destination = registrationService.getByEndpoint(endpoint);
             if (destination == null) {
                 sendError(ticket, String.format("No registration for this endpoint %s.", endpoint));
             }
@@ -222,7 +218,17 @@ public class RedisRequestResponseHandler {
             sendAck(ticket);
 
             // Send it
-            server.send(destination, ticket, request);
+            server.send(destination, request, new ResponseCallback() {
+                @Override
+                public void onResponse(LwM2mResponse response) {
+                    handleResponse(destination.getEndpoint(), ticket, response);
+                }
+            }, new ErrorCallback() {
+                @Override
+                public void onError(Exception e) {
+                    handlerError(destination.getEndpoint(), ticket, e);
+                }
+            });
         } catch (RuntimeException t) {
             String errorMessage = String.format("Unexpected exception pending request message handling.(%s:%s)",
                     t.toString(), t.getMessage());

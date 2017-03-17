@@ -44,7 +44,7 @@ public class LwM2mMultipleResource implements LwM2mResource {
 
     protected LwM2mMultipleResource(int id, Map<Integer, ?> values, Type type) {
         this.id = id;
-        this.values = Collections.unmodifiableMap(new HashMap<Integer, Object>(values));
+        this.values = Collections.unmodifiableMap(new HashMap<>(values));
         this.type = type;
     }
 
@@ -129,7 +129,7 @@ public class LwM2mMultipleResource implements LwM2mResource {
     }
 
     /**
-     * @exception raise a {@link NoSuchElementException}
+     * @exception NoSuchElementException
      */
     @Override
     public Object getValue() {
@@ -232,9 +232,8 @@ public class LwM2mMultipleResource implements LwM2mResource {
             return false;
 
         try {
-            Iterator<?> i = m1.entrySet().iterator();
-            while (i.hasNext()) {
-                Entry<?, ?> e = (Entry<?, ?>) i.next();
+            for (Object o : m1.entrySet()) {
+                Entry<?, ?> e = (Entry<?, ?>) o;
                 Object key = e.getKey();
                 Object value = e.getValue();
                 if (value == null) {
@@ -246,9 +245,7 @@ public class LwM2mMultipleResource implements LwM2mResource {
                             .get(key));
                 }
             }
-        } catch (ClassCastException unused) {
-            return false;
-        } catch (NullPointerException unused) {
+        } catch (ClassCastException | NullPointerException unused) {
             return false;
         }
 

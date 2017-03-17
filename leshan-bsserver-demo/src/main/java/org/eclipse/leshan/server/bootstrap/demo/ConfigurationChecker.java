@@ -21,8 +21,8 @@ import org.apache.commons.lang.ArrayUtils;
 import org.eclipse.leshan.server.bootstrap.BootstrapConfig;
 
 /**
- * Check it's a BoostrapConfig is correct. this is a complex process, we need to check if the different objects are in
- * coherence with each others.
+ * Check a BootstrapConfig is correct. This is a complex process, we need to check if the different objects are in
+ * coherence with each other.
  */
 public class ConfigurationChecker {
 
@@ -43,19 +43,18 @@ public class ConfigurationChecker {
                         "pre-shared-key mode, public key or id must not be empty");
                 break;
             case RPK:
-                assertIf(ArrayUtils.isEmpty(sec.secretKey), "pre-shared-key mode, secret key must not be empty");
+                assertIf(ArrayUtils.isEmpty(sec.secretKey), "raw-public-key mode, secret key must not be empty");
                 assertIf(ArrayUtils.isEmpty(sec.publicKeyOrId),
-                        "pre-shared-key mode, public key or id must not be empty");
+                        "raw-public-key mode, public key or id must not be empty");
                 assertIf(ArrayUtils.isEmpty(sec.serverPublicKeyOrId),
-                        "pre-shared-key mode, server public key or ID must not be empty");
+                        "raw-public-key mode, server public key or ID must not be empty");
                 break;
             case X509:
-                assertIf(ArrayUtils.isEmpty(sec.secretKey), "pre-shared-key mode, secret key must not be empty");
+                assertIf(ArrayUtils.isEmpty(sec.secretKey), "x509 mode, secret key must not be empty");
                 assertIf(ArrayUtils.isEmpty(sec.publicKeyOrId),
-                        "pre-shared-key mode, public key or id must not be empty");
+                        "x509 mode, public key or id must not be empty");
                 assertIf(ArrayUtils.isEmpty(sec.serverPublicKeyOrId),
-                        "pre-shared-key mode, server public key or ID must not be empty");
-            default:
+                        "x509 mode, server public key or ID must not be empty");
                 break;
             }
         }
@@ -78,7 +77,7 @@ public class ConfigurationChecker {
 
             if (security.bootstrapServer) {
                 throw new ConfigurationException("the security entry for server  " + e.getKey()
-                        + " should not be a boostrap server");
+                        + " should not be a bootstrap server");
             }
         }
     }

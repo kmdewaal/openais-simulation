@@ -17,10 +17,11 @@ package org.eclipse.leshan.server.observation;
 
 import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.core.response.ObserveResponse;
+import org.eclipse.leshan.server.registration.Registration;
 
 public interface ObservationListener {
 
-    void newObservation(Observation observation);
+    void newObservation(Observation observation, Registration registration);
 
     void cancelled(Observation observation);
 
@@ -28,7 +29,22 @@ public interface ObservationListener {
      * Called on new notification.
      * 
      * @param observation the observation for which new data are received
-     * @param reponse the lwm2m response received
+     * @param registration the registration concerned by this observation
+     * @param response the lwm2m response received (successful or error response)
+     * 
      */
-    void newValue(Observation observation, ObserveResponse response);
+    void onResponse(Observation observation, Registration registration, ObserveResponse response);
+
+    /**
+     * Called when an error occurs on new notification.
+     * 
+     * @param observation the observation for which new data are received
+     * @param registration the registration concerned by this observation
+     * @param error the exception raised when we handle the notification. It can be :
+     *        <ul>
+     *        <li>InvalidResponseException if the response received is malformed.</li>
+     *        <li>or any other RuntimeException for unexpected issue.
+     *        </ul>
+     */
+    void onError(Observation observation, Registration registration, Exception error);
 }

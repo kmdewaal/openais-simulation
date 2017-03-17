@@ -41,8 +41,8 @@ import org.eclipse.leshan.core.request.exception.InvalidRequestException;
 import org.eclipse.leshan.core.response.DeregisterResponse;
 import org.eclipse.leshan.core.response.RegisterResponse;
 import org.eclipse.leshan.core.response.UpdateResponse;
-import org.eclipse.leshan.server.client.RegistrationService;
 import org.eclipse.leshan.server.registration.RegistrationHandler;
+import org.eclipse.leshan.server.registration.RegistrationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -148,7 +148,7 @@ public class RegisterResource extends CoapResource {
 
         // Create LwM2m request from CoAP request
         // --------------------------------
-        // TODO: assert content media type is APPLICATION LINK FORMAT?
+        // We don't check content media type is APPLICATION LINK FORMAT for now as this is the only format we can expect
         String endpoint = null;
         Long lifetime = null;
         String smsNumber = null;
@@ -158,7 +158,7 @@ public class RegisterResource extends CoapResource {
         // Get object Links
         Link[] objectLinks = Link.parse(request.getPayload());
 
-        Map<String, String> additionalParams = new HashMap<String, String>();
+        Map<String, String> additionalParams = new HashMap<>();
 
         // Get parameters
         for (String param : request.getOptions().getUriQuery()) {

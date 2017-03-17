@@ -13,31 +13,30 @@
  * Contributors:
  *     Sierra Wireless - initial API and implementation
  *******************************************************************************/
-package org.eclipse.leshan.core.node.codec;
+package org.eclipse.leshan;
 
-import org.eclipse.leshan.core.node.LwM2mPath;
+/**
+ * The different DTLS security modes
+ */
+public enum SecurityMode {
+    PSK(0), RPK(1), X509(2), NO_SEC(3);
 
-public class InvalidValueException extends Exception {
+    public final int code;
 
-    private static final long serialVersionUID = 1L;
-
-    private final LwM2mPath path;
-
-    public InvalidValueException(String message, LwM2mPath path) {
-        super(message);
-        this.path = path;
+    private SecurityMode(int code) {
+        this.code = code;
     }
 
-    public InvalidValueException(String message, LwM2mPath path, Exception e) {
-        super(message, e);
-        this.path = path;
+    public static SecurityMode fromCode(long code) {
+        return fromCode((int) code);
     }
 
-    /**
-     * @return the path of the resource with an invalid value
-     */
-    public LwM2mPath getPath() {
-        return path;
+    public static SecurityMode fromCode(int code) {
+        for (SecurityMode sm : SecurityMode.values()) {
+            if (sm.code == code) {
+                return sm;
+            }
+        }
+        throw new IllegalArgumentException(String.format("Unsupported security code : %d", code));
     }
-
 }

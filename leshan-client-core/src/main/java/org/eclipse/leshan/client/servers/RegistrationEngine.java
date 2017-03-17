@@ -21,10 +21,12 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.eclipse.leshan.LwM2m;
 import org.eclipse.leshan.ResponseCode;
 import org.eclipse.leshan.client.observer.LwM2mClientObserver;
-import org.eclipse.leshan.client.request.LwM2mClientRequestSender;
+import org.eclipse.leshan.client.request.LwM2mRequestSender;
 import org.eclipse.leshan.client.resource.LwM2mObjectEnabler;
 import org.eclipse.leshan.client.util.LinkFormatHelper;
 import org.eclipse.leshan.core.request.BootstrapRequest;
@@ -35,6 +37,7 @@ import org.eclipse.leshan.core.response.BootstrapResponse;
 import org.eclipse.leshan.core.response.DeregisterResponse;
 import org.eclipse.leshan.core.response.RegisterResponse;
 import org.eclipse.leshan.core.response.UpdateResponse;
+import org.eclipse.leshan.util.NamedThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,19 +62,21 @@ public class RegistrationEngine {
     private static final int BS_RETRY = 10 * 60; // in seconds
 
     private final String endpoint;
-    private final LwM2mClientRequestSender sender;
+    private final LwM2mRequestSender sender;
     private final Map<Integer, LwM2mObjectEnabler> objectEnablers;
     private final BootstrapHandler bootstrapHandler;
     private final LwM2mClientObserver observer;
+    private final AtomicBoolean started = new AtomicBoolean(false);
 
     // registration update
     private String registrationID;
     private Future<?> registerFuture;
     private ScheduledFuture<?> updateFuture;
-    private final ScheduledExecutorService schedExecutor = Executors.newScheduledThreadPool(2);
+    private final ScheduledExecutorService schedExecutor = Executors.newScheduledThreadPool(2,
+            new NamedThreadFactory("RegistrationEngine#%d"));
 
     public RegistrationEngine(String endpoint, Map<Integer, LwM2mObjectEnabler> objectEnablers,
-            LwM2mClientRequestSender requestSender, BootstrapHandler bootstrapState, LwM2mClientObserver observer) {
+            LwM2mRequestSender requestSender, BootstrapHandler bootstrapState, LwM2mClientObserver observer) {
         this.endpoint = endpoint;
         this.objectEnablers = objectEnablers;
         this.bootstrapHandler = bootstrapState;
@@ -82,6 +87,7 @@ public class RegistrationEngine {
 
     public void start() {
         stop(false); // stop without de-register
+        started.set(true);
         registerFuture = schedExecutor.submit(new RegistrationTask());
     }
 
@@ -97,13 +103,13 @@ public class RegistrationEngine {
             LOG.info("Trying to start bootstrap session to {} ...", serversInfo.bootstrap.getFullUri());
             try {
                 // Send bootstrap request
-                ServerInfo boostrapServer = serversInfo.bootstrap;
-                BootstrapResponse response = sender.send(boostrapServer.getAddress(), boostrapServer.isSecure(),
+                ServerInfo bootstrapServer = serversInfo.bootstrap;
+                BootstrapResponse response = sender.send(bootstrapServer.getAddress(), bootstrapServer.isSecure(),
                         new BootstrapRequest(endpoint), null);
                 if (response == null) {
                     LOG.error("Unable to start bootstrap session: Timeout.");
                     if (observer != null) {
-                        observer.onBootstrapTimeout(boostrapServer);
+                        observer.onBootstrapTimeout(bootstrapServer);
                     }
                     return false;
                 } else if (response.isSuccess()) {
@@ -113,21 +119,21 @@ public class RegistrationEngine {
                     if (timeout) {
                         LOG.error("Bootstrap sequence aborted: Timeout.");
                         if (observer != null) {
-                            observer.onBootstrapTimeout(boostrapServer);
+                            observer.onBootstrapTimeout(bootstrapServer);
                         }
                         return false;
                     } else {
                         serversInfo = ServersInfoExtractor.getInfo(objectEnablers);
                         LOG.info("Bootstrap finished {}.", serversInfo);
                         if (observer != null) {
-                            observer.onBootstrapSuccess(boostrapServer);
+                            observer.onBootstrapSuccess(bootstrapServer);
                         }
                         return true;
                     }
                 } else {
                     LOG.error("Bootstrap failed: {} {}.", response.getCode(), response.getErrorMessage());
                     if (observer != null) {
-                        observer.onBootstrapFailure(boostrapServer, response.getCode(), response.getErrorMessage());
+                        observer.onBootstrapFailure(bootstrapServer, response.getCode(), response.getErrorMessage());
                     }
                     return false;
                 }
@@ -151,10 +157,11 @@ public class RegistrationEngine {
 
         // send register request
         LOG.info("Trying to register to {} ...", dmInfo.getFullUri());
-        RegisterResponse response = sender.send(dmInfo.getAddress(), dmInfo.isSecure(),
-                new RegisterRequest(endpoint, dmInfo.lifetime, null, dmInfo.binding, null,
-                        LinkFormatHelper.getClientDescription(objectEnablers.values(), null), null),
-                null);
+        RegisterResponse response = sender
+                .send(dmInfo.getAddress(),
+                        dmInfo.isSecure(), new RegisterRequest(endpoint, dmInfo.lifetime, LwM2m.VERSION, dmInfo.binding,
+                                null, LinkFormatHelper.getClientDescription(objectEnablers.values(), null), null),
+                        null);
         if (response == null) {
             registrationID = null;
             LOG.error("Registration failed: Timeout.");
@@ -237,7 +244,7 @@ public class RegistrationEngine {
 
         // Send update
         LOG.info("Trying to update registration to {} ...", dmInfo.getFullUri());
-        final UpdateResponse response = sender.send(dmInfo.getAddress(), dmInfo.isSecure(),
+        UpdateResponse response = sender.send(dmInfo.getAddress(), dmInfo.isSecure(),
                 new UpdateRequest(registrationID, null, null, null, null), null);
         if (response == null) {
             registrationID = null;
@@ -290,21 +297,27 @@ public class RegistrationEngine {
                 }
             } catch (InterruptedException e) {
                 LOG.info("Registration task interrupted.");
+            } catch (RuntimeException e) {
+                LOG.error("Unexpected exception during update registration task", e);
             }
         }
     }
 
     private void scheduleRegistration() {
-        LOG.info("Unable to connect to any server, next retry in {}s...", BS_RETRY);
-        registerFuture = schedExecutor.schedule(new RegistrationTask(), BS_RETRY, TimeUnit.SECONDS);
+        if (started.get()) {
+            LOG.info("Unable to connect to any server, next retry in {}s...", BS_RETRY);
+            registerFuture = schedExecutor.schedule(new RegistrationTask(), BS_RETRY, TimeUnit.SECONDS);
+        }
     }
 
     private void scheduleUpdate(DmServerInfo dmInfo) {
-        // calculate next update : lifetime - 10%
-        // dmInfo.lifetime is in seconds
-        long nextUpdate = dmInfo.lifetime * 900l;
-        LOG.info("Next registration update in {}s...", nextUpdate / 1000.0);
-        updateFuture = schedExecutor.schedule(new UpdateRegistrationTask(), nextUpdate, TimeUnit.MILLISECONDS);
+        if (started.get()) {
+            // calculate next update : lifetime - 10%
+            // dmInfo.lifetime is in seconds
+            long nextUpdate = dmInfo.lifetime * 900l;
+            LOG.info("Next registration update in {}s...", nextUpdate / 1000.0);
+            updateFuture = schedExecutor.schedule(new UpdateRegistrationTask(), nextUpdate, TimeUnit.MILLISECONDS);
+        }
     }
 
     private class UpdateRegistrationTask implements Runnable {
@@ -324,6 +337,8 @@ public class RegistrationEngine {
                 }
             } catch (InterruptedException e) {
                 LOG.info("Registration update task interrupted.");
+            } catch (RuntimeException e) {
+                LOG.error("Unexpected exception during update registration task", e);
             }
         }
     }
@@ -341,6 +356,7 @@ public class RegistrationEngine {
     }
 
     public void stop(boolean deregister) {
+        started.set(false);
         cancelUpdateTask(true);
         // TODO we should manage the case where we stop in the middle of a bootstrap session ...
         cancelRegistrationTask();
@@ -352,6 +368,7 @@ public class RegistrationEngine {
     }
 
     public void destroy(boolean deregister) {
+        started.set(false);
         // TODO we should manage the case where we stop in the middle of a bootstrap session ...
         schedExecutor.shutdownNow();
         try {

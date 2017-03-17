@@ -15,6 +15,7 @@
  *******************************************************************************/
 package org.eclipse.leshan.core.node.codec.text;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 import org.eclipse.leshan.core.model.LwM2mModel;
@@ -27,8 +28,8 @@ import org.eclipse.leshan.core.node.LwM2mObjectInstance;
 import org.eclipse.leshan.core.node.LwM2mPath;
 import org.eclipse.leshan.core.node.LwM2mResource;
 import org.eclipse.leshan.core.node.ObjectLink;
+import org.eclipse.leshan.core.node.codec.CodecException;
 import org.eclipse.leshan.core.node.codec.Lwm2mNodeEncoderUtil;
-import org.eclipse.leshan.util.Charsets;
 import org.eclipse.leshan.util.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +38,7 @@ public class LwM2mNodeTextEncoder {
 
     private static final Logger LOG = LoggerFactory.getLogger(LwM2mNodeTextEncoder.class);
 
-    public static byte[] encode(LwM2mNode node, LwM2mPath path, LwM2mModel model) {
+    public static byte[] encode(LwM2mNode node, LwM2mPath path, LwM2mModel model) throws CodecException {
         Validate.notNull(node);
         Validate.notNull(path);
         Validate.notNull(model);
@@ -59,18 +60,18 @@ public class LwM2mNodeTextEncoder {
 
         @Override
         public void visit(LwM2mObject object) {
-            throw new IllegalArgumentException("Object cannot be encoded in text format");
+            throw new CodecException("Object cannot be encoded in text format");
         }
 
         @Override
         public void visit(LwM2mObjectInstance instance) {
-            throw new IllegalArgumentException("Object instance cannot be encoded in text format");
+            throw new CodecException("Object instance cannot be encoded in text format");
         }
 
         @Override
         public void visit(LwM2mResource resource) {
             if (resource.isMultiInstances()) {
-                throw new IllegalArgumentException("Mulitple instances resource cannot be encoded in text format");
+                throw new CodecException("Multiple instances resource cannot be encoded in text format");
             }
             LOG.trace("Encoding resource {} into text", resource);
 
@@ -97,10 +98,10 @@ public class LwM2mNodeTextEncoder {
                 strValue = String.valueOf(objlnk.getObjectId() + ":" + objlnk.getObjectInstanceId());
                 break;
             default:
-                throw new IllegalArgumentException("Cannot encode " + val + " in text format");
+                throw new CodecException("Cannot encode " + val + " in text format");
             }
 
-            encoded = strValue.getBytes(Charsets.UTF_8);
+            encoded = strValue.getBytes(StandardCharsets.UTF_8);
         }
     }
 }

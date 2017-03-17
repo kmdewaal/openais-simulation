@@ -19,9 +19,10 @@ import static org.eclipse.leshan.server.californium.impl.CoapRequestBuilder.*;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -44,10 +45,11 @@ import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.server.Startable;
 import org.eclipse.leshan.server.Stoppable;
 import org.eclipse.leshan.server.californium.CaliforniumRegistrationStore;
-import org.eclipse.leshan.server.client.Registration;
-import org.eclipse.leshan.server.client.RegistrationUpdate;
 import org.eclipse.leshan.server.registration.Deregistration;
 import org.eclipse.leshan.server.registration.ExpirationListener;
+import org.eclipse.leshan.server.registration.Registration;
+import org.eclipse.leshan.server.registration.RegistrationUpdate;
+import org.eclipse.leshan.util.NamedThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,9 +68,27 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
     private static final DataSerializer serializer = new UdpDataSerializer();
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
-    
+
     // Listener use to notify when a registration expires
     private ExpirationListener expirationListener;
+
+    private final ScheduledExecutorService schedExecutor;
+    private final long cleanPeriod; // in seconds
+
+    public InMemoryRegistrationStore() {
+        this(2); // default clean period : 2s
+    }
+
+    public InMemoryRegistrationStore(long cleanPeriodInSec) {
+        this(Executors.newScheduledThreadPool(1,
+                new NamedThreadFactory(String.format("InMemoryRegistrationStore Cleaner (%ds)", cleanPeriodInSec))),
+                cleanPeriodInSec);
+    }
+
+    public InMemoryRegistrationStore(ScheduledExecutorService schedExecutor, long cleanPeriodInSec) {
+        this.schedExecutor = schedExecutor;
+        this.cleanPeriod = cleanPeriodInSec;
+    }
 
     /* *************** Leshan Registration API **************** */
 
@@ -135,20 +155,24 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
     }
 
     @Override
-    public Collection<Registration> getRegistrationByAdress(InetSocketAddress address) {
-        // TODO needed to remove getAllRegistration()
+    public Registration getRegistrationByAdress(InetSocketAddress address) {
+        // TODO we should create an index instead of iterate all over the collection
+        for (Registration r : regsByEp.values()) {
+            if (address.getPort() == r.getPort() && address.getAddress().equals(r.getAddress())) {
+                return r;
+            }
+        }
         return null;
     }
 
     @Override
-    public Collection<Registration> getAllRegistration() {
+    public Iterator<Registration> getAllRegistrations() {
         try {
             lock.readLock().lock();
-            return Collections.unmodifiableCollection(regsByEp.values());
+            return new ArrayList<>(regsByEp.values()).iterator();
         } finally {
             lock.readLock().unlock();
         }
-
     }
 
     @Override
@@ -170,10 +194,29 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
 
     /* *************** Leshan Observation API **************** */
 
+    /*
+     * The observation is not persisted here, it is done by the Californium layer (in the implementation of the
+     * org.eclipse.californium.core.observe.ObservationStore#add method)
+     */
     @Override
-    public Observation addObservation(String registrationId, Observation observation) {
-        // not used observation was added by Californium
-        return null;
+    public Collection<Observation> addObservation(String registrationId, Observation observation) {
+
+        List<Observation> removed = new ArrayList<>();
+
+        try {
+            lock.writeLock().lock();
+            // cancel existing observations for the same path and registration id.
+            for (Observation obs : unsafeGetObservations(registrationId)) {
+                if (observation.getPath().equals(obs.getPath()) && !Arrays.equals(observation.getId(), obs.getId())) {
+                    unsafeRemoveObservation(obs.getId());
+                    removed.add(obs);
+                }
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+
+        return removed;
     }
 
     @Override
@@ -183,7 +226,6 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
 
             Observation observation = build(unsafeGetObservation(new KeyToken(observationId)));
             if (observation != null && registrationId.equals(observation.getRegistrationId())) {
-                // TODO remove API should returns the observation removed
                 unsafeRemoveObservation(observationId);
                 return observation;
             }
@@ -211,18 +253,7 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
     public Collection<Observation> getObservations(String registrationId) {
         try {
             lock.readLock().lock();
-
-            Collection<Observation> result = new ArrayList<>();
-            List<KeyToken> tokens = tokensByRegId.get(registrationId);
-            if (tokens != null) {
-                for (KeyToken token : tokens) {
-                    Observation obs = build(unsafeGetObservation(token));
-                    if (obs != null) {
-                        result.add(obs);
-                    }
-                }
-            }
-            return result;
+            return unsafeGetObservations(registrationId);
         } finally {
             lock.readLock().unlock();
         }
@@ -307,14 +338,14 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
 
     private org.eclipse.californium.core.observe.Observation unsafeGetObservation(KeyToken token) {
         org.eclipse.californium.core.observe.Observation obs = obsByToken.get(token);
-            if (obs != null) {
-                RawData serialize = serializer.serializeRequest(obs.getRequest(), null);
-                DataParser parser = new UdpDataParser();
-                Request newRequest = (Request) parser.parseMessage(serialize);
-                newRequest.setUserContext(obs.getRequest().getUserContext());
-                return new org.eclipse.californium.core.observe.Observation(newRequest, obs.getContext());
-            }
-            return null;
+        if (obs != null) {
+            RawData serialize = serializer.serializeRequest(obs.getRequest(), null);
+            DataParser parser = new UdpDataParser();
+            Request newRequest = (Request) parser.parseMessage(serialize);
+            newRequest.setUserContext(obs.getRequest().getUserContext());
+            return new org.eclipse.californium.core.observe.Observation(newRequest, obs.getContext());
+        }
+        return null;
     }
 
     private void unsafeRemoveObservation(byte[] observationId) {
@@ -344,6 +375,20 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
         }
         tokensByRegId.remove(registrationId);
         return removed;
+    }
+
+    private Collection<Observation> unsafeGetObservations(String registrationId) {
+        Collection<Observation> result = new ArrayList<>();
+        List<KeyToken> tokens = tokensByRegId.get(registrationId);
+        if (tokens != null) {
+            for (KeyToken token : tokens) {
+                Observation obs = build(unsafeGetObservation(token));
+                if (obs != null) {
+                    result.add(obs);
+                }
+            }
+        }
+        return result;
     }
 
     /* Retrieve the registrationId from the request context */
@@ -399,9 +444,7 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
      */
     @Override
     public void start() {
-        // every 2 seconds clean the registration list
-        // TODO re-consider clean-up interval: wouldn't 5 minutes do as well?
-        schedExecutor.scheduleAtFixedRate(new Cleaner(), 2, 2, TimeUnit.SECONDS);
+        schedExecutor.scheduleAtFixedRate(new Cleaner(), cleanPeriod, cleanPeriod, TimeUnit.SECONDS);
     }
 
     /**
@@ -417,14 +460,20 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
         }
     }
 
-    private final ScheduledExecutorService schedExecutor = Executors.newScheduledThreadPool(1);
-
     private class Cleaner implements Runnable {
 
         @Override
         public void run() {
             try {
-                for (Registration reg : new ArrayList<Registration>(getAllRegistration())) {
+                Collection<Registration> allRegs = new ArrayList<>();
+                try {
+                    lock.readLock().lock();
+                    allRegs.addAll(regsByEp.values());
+                } finally {
+                    lock.readLock().unlock();
+                }
+
+                for (Registration reg : allRegs) {
                     if (!reg.isAlive()) {
                         // force de-registration
                         Deregistration removedRegistration = removeRegistration(reg.getId());
@@ -433,7 +482,7 @@ public class InMemoryRegistrationStore implements CaliforniumRegistrationStore, 
                     }
                 }
             } catch (Exception e) {
-                LOG.warn("Unexcepted Exception while registration cleaning", e);
+                LOG.warn("Unexpected Exception while registration cleaning", e);
             }
         }
     }

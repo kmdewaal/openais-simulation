@@ -32,7 +32,7 @@ import org.eclipse.californium.scandium.dtls.InMemoryConnectionStore;
 import org.eclipse.leshan.LwM2mId;
 import org.eclipse.leshan.client.LwM2mClient;
 import org.eclipse.leshan.client.californium.impl.BootstrapResource;
-import org.eclipse.leshan.client.californium.impl.CaliforniumLwM2mClientRequestSender;
+import org.eclipse.leshan.client.californium.impl.CaliforniumLwM2mRequestSender;
 import org.eclipse.leshan.client.californium.impl.ObjectResource;
 import org.eclipse.leshan.client.californium.impl.RootResource;
 import org.eclipse.leshan.client.californium.impl.SecurityObjectPskStore;
@@ -60,7 +60,7 @@ public class LeshanClient implements LwM2mClient {
     private final ConcurrentHashMap<Integer, LwM2mObjectEnabler> objectEnablers;
 
     private final CoapServer clientSideServer;
-    private final CaliforniumLwM2mClientRequestSender requestSender;
+    private final CaliforniumLwM2mRequestSender requestSender;
     private final RegistrationEngine engine;
     private final BootstrapHandler bootstrapHandler;
     private final LwM2mClientObserverDispatcher observers;
@@ -69,8 +69,8 @@ public class LeshanClient implements LwM2mClient {
 
     private CoapEndpoint nonSecureEndpoint;
 
-    public LeshanClient(final String endpoint, final InetSocketAddress localAddress,
-            InetSocketAddress localSecureAddress, final List<? extends LwM2mObjectEnabler> objectEnablers) {
+    public LeshanClient(String endpoint, InetSocketAddress localAddress, InetSocketAddress localSecureAddress,
+            List<? extends LwM2mObjectEnabler> objectEnablers) {
 
         Validate.notNull(endpoint);
         Validate.notNull(localAddress);
@@ -103,7 +103,7 @@ public class LeshanClient implements LwM2mClient {
                 NetworkConfig.getStandard());
 
         // Create sender
-        requestSender = new CaliforniumLwM2mClientRequestSender(secureEndpoint, nonSecureEndpoint);
+        requestSender = new CaliforniumLwM2mRequestSender(secureEndpoint, nonSecureEndpoint);
 
         // Create Client Observers
         observers = new LwM2mClientObserverDispatcher();
@@ -146,8 +146,8 @@ public class LeshanClient implements LwM2mClient {
 
         // Create CoAP resources for each lwm2m Objects.
         for (LwM2mObjectEnabler enabler : objectEnablers) {
-            final ObjectResource clientObject = new ObjectResource(enabler, bootstrapHandler,
-                    new DefaultLwM2mNodeEncoder(), new DefaultLwM2mNodeDecoder());
+            ObjectResource clientObject = new ObjectResource(enabler, bootstrapHandler, new DefaultLwM2mNodeEncoder(),
+                    new DefaultLwM2mNodeDecoder());
             clientSideServer.add(clientObject);
         }
 

@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.core.response.ExecuteResponse;
 import org.eclipse.leshan.core.response.ReadResponse;
+import org.eclipse.leshan.util.NamedThreadFactory;
 
 public class RandomTemperatureSensor extends BaseInstanceEnabler {
 
@@ -26,7 +27,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
     private double maxMeasuredValue = currentTemp;
 
     public RandomTemperatureSensor() {
-        this.scheduler = Executors.newSingleThreadScheduledExecutor();
+        this.scheduler = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("Temperature Sensor"));
         scheduler.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -37,7 +38,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
     }
 
     @Override
-    public synchronized ReadResponse read(final int resourceId) {
+    public synchronized ReadResponse read(int resourceId) {
         switch (resourceId) {
         case MIN_MEASURED_VALUE:
             return ReadResponse.success(resourceId, getTwoDigitValue(minMeasuredValue));
@@ -54,7 +55,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
 
     @Override
     public synchronized ExecuteResponse execute(int resourceId, String params) {
-        switch(resourceId) {
+        switch (resourceId) {
         case RESET_MIN_MAX_MEASURED_VALUES:
             resetMinMaxMeasuredValues();
             return ExecuteResponse.success();
@@ -63,7 +64,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
         }
     }
 
-    private double getTwoDigitValue(final double value) {
+    private double getTwoDigitValue(double value) {
         BigDecimal toBeTruncated = BigDecimal.valueOf(value);
         return toBeTruncated.setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
@@ -79,7 +80,7 @@ public class RandomTemperatureSensor extends BaseInstanceEnabler {
         }
     }
 
-    private Integer adjustMinMaxMeasuredValue(final double newTemperature) {
+    private Integer adjustMinMaxMeasuredValue(double newTemperature) {
 
         if (newTemperature > maxMeasuredValue) {
             maxMeasuredValue = newTemperature;

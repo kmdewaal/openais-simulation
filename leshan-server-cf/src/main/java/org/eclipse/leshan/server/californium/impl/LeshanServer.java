@@ -20,6 +20,7 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -37,6 +38,7 @@ import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig.Builder;
 import org.eclipse.leshan.core.node.codec.LwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.LwM2mNodeEncoder;
+import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.core.request.DownlinkRequest;
 import org.eclipse.leshan.core.response.ErrorCallback;
 import org.eclipse.leshan.core.response.LwM2mResponse;
@@ -47,16 +49,15 @@ import org.eclipse.leshan.server.Startable;
 import org.eclipse.leshan.server.Stoppable;
 import org.eclipse.leshan.server.californium.CaliforniumRegistrationStore;
 import org.eclipse.leshan.server.californium.LeshanServerBuilder;
-import org.eclipse.leshan.server.client.Registration;
-import org.eclipse.leshan.server.client.RegistrationListener;
-import org.eclipse.leshan.server.client.RegistrationService;
-import org.eclipse.leshan.server.client.RegistrationUpdate;
 import org.eclipse.leshan.server.impl.RegistrationServiceImpl;
 import org.eclipse.leshan.server.model.LwM2mModelProvider;
 import org.eclipse.leshan.server.observation.ObservationService;
+import org.eclipse.leshan.server.registration.Registration;
 import org.eclipse.leshan.server.registration.RegistrationHandler;
+import org.eclipse.leshan.server.registration.RegistrationListener;
+import org.eclipse.leshan.server.registration.RegistrationService;
+import org.eclipse.leshan.server.registration.RegistrationUpdate;
 import org.eclipse.leshan.server.request.LwM2mRequestSender;
-import org.eclipse.leshan.server.response.ResponseListener;
 import org.eclipse.leshan.server.security.Authorizer;
 import org.eclipse.leshan.server.security.SecurityInfo;
 import org.eclipse.leshan.server.security.SecurityStore;
@@ -118,13 +119,11 @@ public class LeshanServer implements LwM2mServer {
      */
     public LeshanServer(InetSocketAddress localAddress, InetSocketAddress localSecureAddress,
             CaliforniumRegistrationStore registrationStore, SecurityStore securityStore, Authorizer authorizer,
-            LwM2mModelProvider modelProvider,
-            LwM2mNodeEncoder encoder, LwM2mNodeDecoder decoder, PublicKey publicKey, PrivateKey privateKey,
-            X509Certificate[] x509CertChain, Certificate[] trustedCertificates) {
+            LwM2mModelProvider modelProvider, LwM2mNodeEncoder encoder, LwM2mNodeDecoder decoder, PublicKey publicKey,
+            PrivateKey privateKey, X509Certificate[] x509CertChain, Certificate[] trustedCertificates) {
         Validate.notNull(localAddress, "IP address cannot be null");
         Validate.notNull(localSecureAddress, "Secure IP address cannot be null");
         Validate.notNull(registrationStore, "registration store cannot be null");
-        Validate.notNull(securityStore, "securityStore cannot be null");
         Validate.notNull(authorizer, "authorizer cannot be null");
         Validate.notNull(modelProvider, "modelProvider cannot be null");
         Validate.notNull(encoder, "encoder cannot be null");
@@ -141,19 +140,21 @@ public class LeshanServer implements LwM2mServer {
         this.registrationService.addListener(new RegistrationListener() {
 
             @Override
-            public void updated(final RegistrationUpdate update, final Registration updatedRegistration) {
+            public void updated(RegistrationUpdate update, Registration updatedRegistration) {
             }
 
             @Override
-            public void unregistered(final Registration registration) {
-                LeshanServer.this.observationService.cancelObservations(registration);
+            public void unregistered(Registration registration, Collection<Observation> observations) {
                 requestSender.cancelPendingRequests(registration);
             }
 
             @Override
-            public void registered(final Registration registration) {
+            public void registered(Registration registration) {
             }
         });
+
+        // define a set of endpoints
+        Set<Endpoint> endpoints = new HashSet<>();
 
         // default endpoint
         coapServer = new CoapServer() {
@@ -167,39 +168,42 @@ public class LeshanServer implements LwM2mServer {
         nonSecureEndpoint.addNotificationListener(observationService);
         observationService.setNonSecureEndpoint(nonSecureEndpoint);
         coapServer.addEndpoint(nonSecureEndpoint);
+        endpoints.add(nonSecureEndpoint);
 
         // secure endpoint
-        Builder builder = new DtlsConnectorConfig.Builder(localSecureAddress);
-        builder.setPskStore(new LwM2mPskStore(this.securityStore, this.registrationService.getStore()));
+        if (securityStore != null) {
+            Builder builder = new DtlsConnectorConfig.Builder(localSecureAddress);
+            builder.setPskStore(new LwM2mPskStore(this.securityStore, this.registrationService.getStore()));
 
-        // if in raw key mode and not in X.509 set the raw keys
-        if (x509CertChain == null && privateKey != null && publicKey != null) {
-            builder.setIdentity(privateKey, publicKey);
-        }
-        // if in X.509 mode set the private key, certificate chain, public key is extracted from the certificate
-        if (privateKey != null && x509CertChain != null && x509CertChain.length > 0) {
-            builder.setIdentity(privateKey, x509CertChain, false);
-        }
+            // if in raw key mode and not in X.509 set the raw keys
+            if (x509CertChain == null && privateKey != null && publicKey != null) {
+                builder.setIdentity(privateKey, publicKey);
+            }
+            // if in X.509 mode set the private key, certificate chain, public key is extracted from the certificate
+            if (privateKey != null && x509CertChain != null && x509CertChain.length > 0) {
+                builder.setIdentity(privateKey, x509CertChain, false);
+            }
 
-        if (trustedCertificates != null && trustedCertificates.length > 0) {
-            builder.setTrustStore(trustedCertificates);
-        }
+            if (trustedCertificates != null && trustedCertificates.length > 0) {
+                builder.setTrustStore(trustedCertificates);
+            }
 
-        secureEndpoint = new CoapEndpoint(new DTLSConnector(builder.build()), NetworkConfig.getStandard(),
-                this.observationService.getObservationStore());
-        secureEndpoint.addNotificationListener(observationService);
-        observationService.setSecureEndpoint(secureEndpoint);
-        coapServer.addEndpoint(secureEndpoint);
+            secureEndpoint = new CoapEndpoint(new DTLSConnector(builder.build()), NetworkConfig.getStandard(),
+                    this.observationService.getObservationStore());
+            secureEndpoint.addNotificationListener(observationService);
+            observationService.setSecureEndpoint(secureEndpoint);
+            coapServer.addEndpoint(secureEndpoint);
+            endpoints.add(secureEndpoint);
+        } else {
+            secureEndpoint = null;
+        }
 
         // define /rd resource
-        final RegisterResource rdResource = new RegisterResource(
+        RegisterResource rdResource = new RegisterResource(
                 new RegistrationHandler(this.registrationService, authorizer));
         coapServer.add(rdResource);
 
         // create sender
-        final Set<Endpoint> endpoints = new HashSet<>();
-        endpoints.add(nonSecureEndpoint);
-        endpoints.add(secureEndpoint);
         requestSender = new CaliforniumLwM2mRequestSender(endpoints, this.observationService, modelProvider, encoder,
                 decoder);
     }
@@ -237,6 +241,7 @@ public class LeshanServer implements LwM2mServer {
         LOG.info("LWM2M server stopped.");
     }
 
+    @Override
     public void destroy() {
         // Destroy server
         coapServer.destroy();
@@ -244,9 +249,14 @@ public class LeshanServer implements LwM2mServer {
         // Destroy stores
         if (registrationStore instanceof Destroyable) {
             ((Destroyable) registrationStore).destroy();
+        } else if (registrationStore instanceof Stoppable) {
+            ((Stoppable) registrationStore).stop();
         }
+
         if (securityStore instanceof Destroyable) {
             ((Destroyable) securityStore).destroy();
+        } else if (securityStore instanceof Stoppable) {
+            ((Stoppable) securityStore).stop();
         }
 
         LOG.info("LWM2M server destroyed.");
@@ -273,36 +283,21 @@ public class LeshanServer implements LwM2mServer {
     }
 
     @Override
-    public <T extends LwM2mResponse> T send(final Registration destination, final DownlinkRequest<T> request)
+    public <T extends LwM2mResponse> T send(Registration destination, DownlinkRequest<T> request)
             throws InterruptedException {
         return requestSender.send(destination, request, null);
     }
 
     @Override
-    public <T extends LwM2mResponse> T send(final Registration destination, final DownlinkRequest<T> request, long timeout)
+    public <T extends LwM2mResponse> T send(Registration destination, DownlinkRequest<T> request, long timeout)
             throws InterruptedException {
         return requestSender.send(destination, request, timeout);
     }
 
     @Override
-    public <T extends LwM2mResponse> void send(final Registration destination, final DownlinkRequest<T> request,
-            final ResponseCallback<T> responseCallback, final ErrorCallback errorCallback) {
+    public <T extends LwM2mResponse> void send(Registration destination, DownlinkRequest<T> request,
+            ResponseCallback<T> responseCallback, ErrorCallback errorCallback) {
         requestSender.send(destination, request, responseCallback, errorCallback);
-    }
-
-    @Override
-    public <T extends LwM2mResponse> void send(Registration destination, String requestTicket, DownlinkRequest<T> request) {
-        requestSender.send(destination, requestTicket, request);
-    }
-
-    @Override
-    public void addResponseListener(ResponseListener listener) {
-        requestSender.addResponseListener(listener);
-    }
-
-    @Override
-    public void removeResponseListener(ResponseListener listener) {
-        requestSender.removeResponseListener(listener);
     }
 
     /**
@@ -317,7 +312,11 @@ public class LeshanServer implements LwM2mServer {
     }
 
     public InetSocketAddress getSecureAddress() {
-        return secureEndpoint.getAddress();
+        if (secureEndpoint != null) {
+            return secureEndpoint.getAddress();
+        } else {
+            return null;
+        }
     }
 
     /**
@@ -334,6 +333,7 @@ public class LeshanServer implements LwM2mServer {
             exchange.respond(ResponseCode.NOT_FOUND);
         }
 
+        @Override
         public List<Endpoint> getEndpoints() {
             return coapServer.getEndpoints();
         }

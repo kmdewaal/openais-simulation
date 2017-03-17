@@ -20,6 +20,7 @@ import static org.junit.Assert.*;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.Collection;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -39,16 +40,17 @@ import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.ResourceModel;
 import org.eclipse.leshan.core.model.ResourceModel.Operations;
 import org.eclipse.leshan.core.model.ResourceModel.Type;
+import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.response.ExecuteResponse;
 import org.eclipse.leshan.server.californium.LeshanServerBuilder;
 import org.eclipse.leshan.server.californium.impl.LeshanServer;
-import org.eclipse.leshan.server.client.Registration;
-import org.eclipse.leshan.server.client.RegistrationListener;
-import org.eclipse.leshan.server.client.RegistrationUpdate;
 import org.eclipse.leshan.server.impl.InMemorySecurityStore;
 import org.eclipse.leshan.server.impl.RegistrationServiceImpl;
 import org.eclipse.leshan.server.model.StaticModelProvider;
+import org.eclipse.leshan.server.registration.Registration;
+import org.eclipse.leshan.server.registration.RegistrationListener;
+import org.eclipse.leshan.server.registration.RegistrationUpdate;
 
 /**
  * Helper for running a server and executing a client against it.
@@ -56,7 +58,7 @@ import org.eclipse.leshan.server.model.StaticModelProvider;
  */
 public class IntegrationTestHelper {
     public static final Random r = new Random();
-    
+
     static final String MODEL_NUMBER = "IT-TEST-123";
     public static final long LIFETIME = 2;
 
@@ -96,10 +98,10 @@ public class IntegrationTestHelper {
                 null, null, null);
         ResourceModel opaquefield = new ResourceModel(OPAQUE_RESOURCE_ID, "opaque", Operations.RW, false, false,
                 Type.OPAQUE, null, null, null);
-        ResourceModel objlnkfield = new ResourceModel(OBJLNK_MULTI_INSTANCE_RESOURCE_ID, "objlnk", Operations.RW, true, false, Type.OBJLNK, 
-                null, null, null);
-        ResourceModel objlnkSinglefield = new ResourceModel(OBJLNK_SINGLE_INSTANCE_RESOURCE_ID, "objlnk", Operations.RW, false, false, Type.OBJLNK,
-                null, null, null);
+        ResourceModel objlnkfield = new ResourceModel(OBJLNK_MULTI_INSTANCE_RESOURCE_ID, "objlnk", Operations.RW, true,
+                false, Type.OBJLNK, null, null, null);
+        ResourceModel objlnkSinglefield = new ResourceModel(OBJLNK_SINGLE_INSTANCE_RESOURCE_ID, "objlnk", Operations.RW,
+                false, false, Type.OBJLNK, null, null, null);
         objectModels.add(new ObjectModel(TEST_OBJECT_ID, "testobject", null, false, false, stringfield, booleanfield,
                 integerfield, floatfield, timefield, opaquefield, objlnkfield, objlnkSinglefield));
 
@@ -148,6 +150,10 @@ public class IntegrationTestHelper {
         builder.setSecurityStore(new InMemorySecurityStore());
         server = builder.build();
         // monitor client registration
+        setupRegistrationMonitoring();
+    }
+
+    protected void setupRegistrationMonitoring() {
         resetLatch();
         server.getRegistrationService().addListener(new RegistrationListener() {
             @Override
@@ -158,7 +164,7 @@ public class IntegrationTestHelper {
             }
 
             @Override
-            public void unregistered(Registration registration) {
+            public void unregistered(Registration registration, Collection<Observation> observations) {
                 if (registration.getEndpoint().equals(currentEndpointIdentifier)) {
                     deregisterLatch.countDown();
                 }
@@ -180,25 +186,49 @@ public class IntegrationTestHelper {
         updateLatch = new CountDownLatch(1);
     }
 
-    public boolean waitForRegistration(long timeInSeconds) {
+    public void waitForRegistration(long timeInSeconds) {
         try {
-            return registerLatch.await(timeInSeconds, TimeUnit.SECONDS);
+            assertTrue(registerLatch.await(timeInSeconds, TimeUnit.SECONDS));
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public boolean waitForUpdate(long timeInSeconds) {
+    public void ensureNoRegistration(long timeInSeconds) {
         try {
-            return updateLatch.await(timeInSeconds, TimeUnit.SECONDS);
+            assertFalse(registerLatch.await(timeInSeconds, TimeUnit.SECONDS));
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public boolean waitForDeregistration(long timeInSeconds) {
+    public void waitForUpdate(long timeInSeconds) {
         try {
-            return deregisterLatch.await(timeInSeconds, TimeUnit.SECONDS);
+            assertTrue(updateLatch.await(timeInSeconds, TimeUnit.SECONDS));
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void ensureNoUpdate(long timeInSeconds) {
+        try {
+            assertFalse(updateLatch.await(timeInSeconds, TimeUnit.SECONDS));
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void waitForDeregistration(long timeInSeconds) {
+        try {
+            assertTrue(deregisterLatch.await(timeInSeconds, TimeUnit.SECONDS));
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void ensureNoDeregistration(long timeInSeconds) {
+        try {
+            assertFalse(deregisterLatch.await(timeInSeconds, TimeUnit.SECONDS));
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -211,7 +241,7 @@ public class IntegrationTestHelper {
     public void deregisterClient() {
         Registration r = getCurrentRegistration();
         if (r != null)
-            ((RegistrationServiceImpl) server.getRegistrationService()).deregisterClient(r.getId());
+            ((RegistrationServiceImpl) server.getRegistrationService()).getStore().removeRegistration(r.getId());
     }
 
     public void dispose() {

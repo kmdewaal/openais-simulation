@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016 Sierra Wireless and others.
+ * Copyright (c) 2017 Sierra Wireless and others.
  * 
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
@@ -13,18 +13,21 @@
  * Contributors:
  *     Sierra Wireless - initial API and implementation
  *******************************************************************************/
-package org.eclipse.leshan.server.registration;
-
-import java.util.Collection;
-
-import org.eclipse.leshan.core.observation.Observation;
+package org.eclipse.leshan.core.request.exception;
 
 /**
- * A listener to be aware of registration expiration.
- * 
- * @see RegistrationStore
+ * Throwns when a invalid response is received.
  */
-public interface ExpirationListener {
+public class InvalidResponseException extends RuntimeException {
 
-    void registrationExpired(Registration registration, Collection<Observation> observations);
+    private static final long serialVersionUID = 1L;
+
+
+    public InvalidResponseException(String message) {
+        super(message);
+    }
+
+    public InvalidResponseException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

@@ -15,14 +15,14 @@
  *******************************************************************************/
 package org.eclipse.leshan.server.bootstrap.demo;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.io.Charsets;
+import org.eclipse.leshan.SecurityMode;
 import org.eclipse.leshan.server.bootstrap.BootstrapConfig;
 import org.eclipse.leshan.server.bootstrap.BootstrapConfig.ServerSecurity;
-import org.eclipse.leshan.server.bootstrap.SecurityMode;
 import org.eclipse.leshan.server.security.BootstrapSecurityStore;
 import org.eclipse.leshan.server.security.SecurityInfo;
 
@@ -39,7 +39,7 @@ public class BootstrapSecurityStoreImpl implements BootstrapSecurityStore {
 
     @Override
     public SecurityInfo getByIdentity(String identity) {
-        byte[] identityBytes = identity.getBytes(Charsets.UTF_8);
+        byte[] identityBytes = identity.getBytes(StandardCharsets.UTF_8);
         for (Map.Entry<String, BootstrapConfig> e : bsStore.getBootstrapConfigs().entrySet()) {
             BootstrapConfig bsConfig = e.getValue();
             if (bsConfig.security != null) {
@@ -68,7 +68,7 @@ public class BootstrapSecurityStoreImpl implements BootstrapSecurityStore {
             if (value.bootstrapServer && value.securityMode == SecurityMode.PSK) {
                 // got it!
                 SecurityInfo securityInfo = SecurityInfo.newPreSharedKeyInfo(endpoint,
-                        new String(value.publicKeyOrId, Charsets.UTF_8), value.secretKey);
+                        new String(value.publicKeyOrId, StandardCharsets.UTF_8), value.secretKey);
                 return Arrays.asList(securityInfo);
             }
         }

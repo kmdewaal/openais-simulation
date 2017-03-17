@@ -42,18 +42,21 @@ public class DefaultLwM2mNodeDecoder implements LwM2mNodeDecoder {
 
     @Override
     public LwM2mNode decode(byte[] content, ContentFormat format, LwM2mPath path, LwM2mModel model)
-            throws InvalidValueException {
+            throws CodecException {
         return decode(content, format, path, model, nodeClassFromPath(path));
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public <T extends LwM2mNode> T decode(byte[] content, ContentFormat format, LwM2mPath path, LwM2mModel model,
-            Class<T> nodeClass) throws InvalidValueException {
+            Class<T> nodeClass) throws CodecException {
 
         LOG.debug("Decoding value for path {} and format {}: {}", path, format, content);
         Validate.notNull(path);
-        Validate.notNull(format);
+
+        if (format == null){
+            throw new CodecException("Content format is mandatory.");
+        }
 
         // Decode content.
         switch (format.getCode()) {
@@ -68,17 +71,21 @@ public class DefaultLwM2mNodeDecoder implements LwM2mNodeDecoder {
         case ContentFormat.OLD_JSON_CODE:
             return LwM2mNodeJsonDecoder.decode(content, path, model, nodeClass);
         case ContentFormat.LINK_CODE:
-            throw new UnsupportedOperationException("Content format " + format + " not yet implemented '" + path + "'");
+            throw new CodecException("Content format " + format + " not yet implemented '" + path + "'");
+        default:
+            throw new CodecException("Content format " + format + " is not supported");
         }
-        return null;
     }
 
     @Override
     public List<TimestampedLwM2mNode> decodeTimestampedData(byte[] content, ContentFormat format, LwM2mPath path,
-            LwM2mModel model) throws InvalidValueException {
+            LwM2mModel model) throws CodecException {
         LOG.debug("Decoding value for path {} and format {}: {}", path, format, content);
         Validate.notNull(path);
-        Validate.notNull(format);
+
+        if (format == null) {
+            throw new CodecException("Content format is mandatory.");
+        }
 
         // Decode content.
         switch (format.getCode()) {
@@ -93,9 +100,10 @@ public class DefaultLwM2mNodeDecoder implements LwM2mNodeDecoder {
         case ContentFormat.OLD_JSON_CODE:
             return LwM2mNodeJsonDecoder.decodeTimestamped(content, path, model, nodeClassFromPath(path));
         case ContentFormat.LINK_CODE:
-            throw new UnsupportedOperationException("Content format " + format + " not yet implemented '" + path + "'");
+            throw new CodecException("Content format " + format + " not yet implemented '" + path + "'");
+        default:
+            throw new CodecException("Content format " + format + " is not supported");
         }
-        return null;
     }
 
     private static List<TimestampedLwM2mNode> toTimestampedNodes(LwM2mNode node) {

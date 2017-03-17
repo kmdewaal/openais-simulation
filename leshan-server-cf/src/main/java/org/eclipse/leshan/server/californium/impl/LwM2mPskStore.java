@@ -19,7 +19,7 @@ import java.net.InetSocketAddress;
 import java.util.Arrays;
 
 import org.eclipse.californium.scandium.dtls.pskstore.PskStore;
-import org.eclipse.leshan.server.client.Registration;
+import org.eclipse.leshan.server.registration.Registration;
 import org.eclipse.leshan.server.registration.RegistrationStore;
 import org.eclipse.leshan.server.security.SecurityInfo;
 import org.eclipse.leshan.server.security.SecurityStore;
@@ -54,14 +54,13 @@ public class LwM2mPskStore implements PskStore {
         if (registrationStore == null)
             return null;
 
-        for (Registration r : registrationStore.getAllRegistration()) {
-            if (inetAddress.getPort() == r.getPort() && inetAddress.getAddress().equals(r.getAddress())) {
-                SecurityInfo securityInfo = securityStore.getByEndpoint(r.getEndpoint());
-                if (securityInfo != null) {
-                    return securityInfo.getIdentity();
-                }
-                return null;
+        Registration registration = registrationStore.getRegistrationByAdress(inetAddress);
+        if (registration != null) {
+            SecurityInfo securityInfo = securityStore.getByEndpoint(registration.getEndpoint());
+            if (securityInfo != null) {
+                return securityInfo.getIdentity();
             }
+            return null;
         }
         return null;
     }
